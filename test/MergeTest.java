@@ -1,10 +1,10 @@
 public class MergeTest {
 
-    private String s = "Hello";
+    private final String s;
 
 
     public MergeTest(){
-
+        s = "Hello";
     }
 
     public MergeTest(String s) {
