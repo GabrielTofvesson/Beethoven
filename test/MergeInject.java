@@ -4,12 +4,22 @@ import dev.w1zzrd.asm.Inject;
 @InjectClass(value = MergeTest.class)
 public class MergeInject implements Runnable {
 
+    @Inject
+    public int number;
+
     // Dummy field
     String s;
 
     @Inject
-    public String test(){
+    MergeInject() {
+        s = "Hello";
+        number = 10;
+    }
+
+    @Inject
+    private String test(){
         System.out.println(s);
+        System.out.println(number);
         return "Modified";
     }
 
