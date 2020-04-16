@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 public class Merger {
 
     protected final ClassNode targetNode;
-    protected final List<MethodNode> inject = new ArrayList<>();
+    protected final List<MethodNode> injectMethods = new ArrayList<>();
+    protected final List<FieldNode> injectFields = new ArrayList<>();
 
 
     public Merger(String targetClass) throws IOException {
@@ -40,18 +41,23 @@ public class Merger {
 
     public void inject(MethodNode inject, String injectOwner) {
         transformInjection(inject, injectOwner);
-        this.inject.add(inject);
+        injectMethods.add(inject);
+    }
+
+    public void inject(FieldNode inject) {
+        injectFields.add(inject);
     }
 
     public void inject(ClassNode inject) {
         inject.methods.stream().filter(Merger::shouldInject).forEach(mNode -> inject(mNode, inject.name));
+        inject.fields.stream().filter(Merger::shouldInject).forEach(this::inject);
 
         if (inject.visibleAnnotations != null && inject.interfaces != null) {
 
             AsmAnnotation annot = getAnnotation("Ldev/w1zzrd/asm/InjectClass;", inject);
 
-            // If there is not inject annotation or there is an
-            // explicit request to not inject interfaces, just return
+            // If there is not injectMethods annotation or there is an
+            // explicit request to not injectMethods interfaces, just return
             if (annot == null || (annot.hasEntry("injectInterfaces") && !annot.getEntry("injectInterfaces", Boolean.class)))
                 return;
 
@@ -130,12 +136,24 @@ public class Merger {
     public byte[] toByteArray() {
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 
-        List<MethodNode> original = targetNode.methods;
+        // Adapt nodes as necessary
+        List<MethodNode> originalMethods = targetNode.methods;
         targetNode.methods = targetNode.methods.stream().filter(this::isNotInjected).collect(Collectors.toList());
-        targetNode.accept(writer);
-        targetNode.methods = original;
 
-        inject.forEach(node -> node.accept(writer));
+        List<FieldNode> originalFields = targetNode.fields;
+        targetNode.fields = targetNode.fields.stream().filter(this::isNotInjected).collect(Collectors.toList());
+
+
+        // Accept writer
+        targetNode.accept(writer);
+
+        // Restore originals
+        targetNode.methods = originalMethods;
+        targetNode.fields = originalFields;
+
+        // Inject methods and fields
+        injectMethods.forEach(node -> node.accept(writer));
+        injectFields.forEach(node -> node.accept(writer));
 
         return writer.toByteArray();
     }
@@ -167,13 +185,20 @@ public class Merger {
 
 
     protected boolean isNotInjected(MethodNode node) {
-        for (MethodNode mNode : inject)
+        for (MethodNode mNode : injectMethods)
             if (methodNodeEquals(node, mNode))
                 return false;
 
         return true;
     }
 
+    protected boolean isNotInjected(FieldNode node) {
+        for (FieldNode mNode : injectFields)
+            if (fieldNodeEquals(node, mNode))
+                return false;
+
+        return true;
+    }
 
 
     // To be used instead of referencing object constructs
@@ -208,10 +233,23 @@ public class Merger {
     }
 
     protected static boolean methodNodeEquals(MethodNode a, MethodNode b) {
+        return a.name.equals(b.name) && Objects.equals(a.desc, b.desc);
+    }
+
+    protected static boolean fieldNodeEquals(FieldNode a, FieldNode b) {
         return a.name.equals(b.name) && Objects.equals(a.signature, b.signature);
     }
 
     protected static boolean shouldInject(MethodNode node) {
+        if (node.visibleAnnotations == null) return false;
+        for (AnnotationNode aNode : node.visibleAnnotations)
+            if (aNode.desc.equals("Ldev/w1zzrd/asm/Inject;"))
+                return true;
+
+        return false;
+    }
+
+    protected static boolean shouldInject(FieldNode node) {
         if (node.visibleAnnotations == null) return false;
         for (AnnotationNode aNode : node.visibleAnnotations)
             if (aNode.desc.equals("Ldev/w1zzrd/asm/Inject;"))
