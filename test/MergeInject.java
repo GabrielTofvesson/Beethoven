@@ -1,8 +1,9 @@
 import dev.w1zzrd.asm.InjectClass;
 import dev.w1zzrd.asm.Inject;
+import static dev.w1zzrd.asm.InPlaceInjection.*;
 
 @InjectClass(value = MergeTest.class)
-public class MergeInject implements Runnable {
+public class MergeInject extends MergeTest implements Runnable {
 
     @Inject
     public int number;
@@ -16,10 +17,17 @@ public class MergeInject implements Runnable {
         number = 10;
     }
 
-    @Inject
-    private String test(){
+    @Inject(REPLACE)
+    public String test(){
         System.out.println(s);
+
+        if(s.endsWith("e!!")) {
+            System.out.println("Special!");
+            return "ASDF";
+        }
+
         System.out.println(number);
+
         return "Modified";
     }
 
@@ -28,7 +36,9 @@ public class MergeInject implements Runnable {
     public void run() {
         for (int i = 0; i < 5; ++i) {
             s = s + "!";
-            System.out.println(test());
+            System.out.println(test()+'\n');
         }
     }
+
+    public String test1(){ return null; }
 }
