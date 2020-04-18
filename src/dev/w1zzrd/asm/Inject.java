@@ -5,6 +5,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import static dev.w1zzrd.asm.InPlaceInjection.REPLACE;
+
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.CONSTRUCTOR, ElementType.METHOD, ElementType.FIELD})
-public @interface Inject { }
+public @interface Inject {
+    InPlaceInjection value() default REPLACE;
+}
