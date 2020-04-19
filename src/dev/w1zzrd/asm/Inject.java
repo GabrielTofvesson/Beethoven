@@ -11,4 +11,6 @@ import static dev.w1zzrd.asm.InPlaceInjection.REPLACE;
 @Target({ElementType.CONSTRUCTOR, ElementType.METHOD, ElementType.FIELD})
 public @interface Inject {
     InPlaceInjection value() default REPLACE;
+    String target() default "";
+    boolean acceptOriginalReturn() default false;
 }
