@@ -17,8 +17,22 @@ public class MergeInject extends MergeTest implements Runnable {
         number = 10;
     }
 
-    @Inject(REPLACE)
-    public String test(){
+    @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
+    public String test(String retVal){
+        System.out.println("Got retval: "+retVal);
+
+        if (retVal.equals("Test")) {
+            System.out.println("Test");
+        }
+
+        retVal = "ASDF";
+
+        String a = "retVal";
+
+        System.out.println(a);
+        a = "Test";
+        System.out.println(a);
+
         System.out.println(s);
 
         if(s.endsWith("e!!")) {

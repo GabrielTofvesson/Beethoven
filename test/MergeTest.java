@@ -12,7 +12,7 @@ public class MergeTest {
     }
 
     public String test(){
-        return s;
+        return s + "Test";
     }
 
     public String test1(){
