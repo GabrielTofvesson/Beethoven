@@ -7,24 +7,22 @@ methods and fields.
 
 ## Progress:
 
-* Injected methods
+* Method injection (replacement, in-place leading injection and in-place trailing injection)
+
+* Field injection (access transforming and new fields)
 
 * Target field accesses from injection class (non-primitive/reference)
 
-* Method calls and field acceses referencing injection class elements automatically redirected to target
+* Method calls and field accesses referencing injection class elements automatically redirected to target
 
 * Optional interface injection
 
-## TODO:
-
 * Target class method invocation
-
-* Support for target class primitive field access
-
-* Support for target class primitive return-value methods
 
 * Multiple injections per method
 
-* In-place method instruction injection
+* In-place method instruction injection with references to previous method's return value
+
+## TODO:
 
 * Better tests
