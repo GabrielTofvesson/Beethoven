@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="Beethoven:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/Beethoven_jar</output-path>
+    <root id="archive" name="Beethoven.jar">
+      <element id="module-output" name="Beethoven" />
+    </root>
+  </artifact>
+</component>

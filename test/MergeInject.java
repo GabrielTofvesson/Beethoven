@@ -17,6 +17,12 @@ public class MergeInject extends MergeTest implements Runnable {
         number = 10;
     }
 
+
+
+
+
+
+
     @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
     public String test(String retVal){
         System.out.println("Got retval: "+retVal);
@@ -44,6 +50,18 @@ public class MergeInject extends MergeTest implements Runnable {
 
         return "Modified";
     }
+
+    @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
+    public String test_inject$1(String retVal) {
+        System.out.println("Another injection: "+retVal);
+        return retVal;
+    }
+
+
+
+
+
+
 
     @Override
     @Inject
