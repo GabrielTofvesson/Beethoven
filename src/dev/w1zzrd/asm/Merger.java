@@ -229,8 +229,15 @@ public class Merger {
                         boolean keepReturn = annotation.hasEntry("acceptOriginalReturn") && (Boolean)annotation.getEntry("acceptOriginalReturn");
                         boolean hasReturn = !signature.ret.equals("V");
 
+                        // Received return value
                         LocalVariableNode retNode = keepReturn && hasReturn ? inject.localVariables.get((isStaticMethod ? 0 : 1) + signature.args.length) : null;
 
+                        if (keepReturn && hasReturn) {
+                            // Set the proper index and update maxLocals accordingly
+                            // This is done here so that injected calls to modify this variable use the correct index
+                            retNode.index = Math.max(retNode.index, adapt.get().localVariables.stream().mapToInt(it -> it.index).reduce(Math::max).orElse(0));
+                            inject.maxLocals = retNode.index + 1;
+                        }
 
                         // If no goto instructions were added, just remove the added label
                         boolean noGoto = removeReturn(toAdapt, next, !keepReturn && hasReturn, retNode);
@@ -240,27 +247,6 @@ public class Merger {
                         }
                         else // A goto call was added. Make sure we inform the JVM of stack and locals with a frame
                             instr.add(1, new FrameNode(Opcodes.F_SAME, -1, null, -1, null));
-
-                        /*
-                        if(keepReturn && hasReturn) {
-                            if (!extended.contains(signature)) {
-                                Object[] locals = new Object[inject.localVariables.size()];
-
-                                locals[0] = getTargetName();//resolveFrameType(inject.localVariables.get(0).desc);
-                                locals[1] = Opcodes.TOP;
-                                locals[2] = resolveFrameType(inject.localVariables.get(2).desc);
-
-                                //for (int i = 0; i < inject.localVariables.size(); ++i)
-                                //    locals[i] = resolveFrameType(inject.localVariables.get(i).desc);
-
-                                //instr.add(1, new FrameNode(Opcodes.F_SAME, -1, null, -1, null));
-                                instr.add(1, new FrameNode(Opcodes.F_FULL, 3, locals, 1, new Object[]{ resolveFrameType(inject.localVariables.get(inject.localVariables.size() - 1).desc) }));
-                                instr.add(2, new VarInsnNode(resolveStoreInstr(signature.ret), locals.length - 1));
-
-                                extended.add(signature);
-                            }
-                        }
-                        */
 
                         instr.addAll(0, toAdapt);
 
@@ -281,6 +267,21 @@ public class Merger {
                         break;
                     }
                 }
+
+                // Add the original locals to the injection
+                inject.localVariables.addAll(adapt.get().localVariables.stream().filter(it -> !it.name.equals("this")).collect(Collectors.toList()));
+                Optional<LocalVariableNode> injectThis = inject.localVariables.stream().filter(it -> it.name.equals("this")).findFirst();
+                Optional<LocalVariableNode> origThis = adapt.get().localVariables.stream().filter(it -> it.name.equals("this")).findFirst();
+
+                if (injectThis.isPresent() != origThis.isPresent())
+                    throw new RuntimeException("Method modifier mismatch! Cannot weave a static method and non-static method!");
+
+                // Update the scope of "this". It always has index 0 and spans the whole method
+                if (injectThis.isPresent()) {
+                    origThis.get().end = injectThis.get().end;
+                    inject.localVariables.add(origThis.get());
+                    inject.localVariables.remove(injectThis.get());
+                }
             }
         }
 
@@ -295,6 +296,8 @@ public class Merger {
                 var.desc = "L"+getTargetName()+";";
         });
 
+        // Apply signature overrides
+        inject.name = signature.name;
         inject.desc = '(' + signature.args_literal + ')' + signature.ret;
     }
 
@@ -443,22 +446,46 @@ public class Merger {
     }
 
     protected static boolean methodNodeEquals(MethodNode a, MethodNode b) {
-        return getSignature(a).equals(getSignature(b));
+        return getSignature(a).equals(getSignature(b)) && (isStatic(a) == isStatic(b));
+    }
+
+    protected static boolean isStatic(MethodNode node) {
+        return (node.access & Opcodes.ACC_STATIC) != 0;
     }
 
     protected static MethodSig getSignature(MethodNode node) {
         AsmAnnotation<Inject> annotation = getAnnotation(Inject.class, node);
+        MethodSig actualSignature = Objects.requireNonNull(parseMethodSignature(node.name + node.desc));
 
         // Attempt to parse a declared signature
         if (annotation != null && annotation.hasEntry("target")) {
-            MethodSig sig = parseMethodSignature(annotation.getEntry("target"));
+            MethodSig overrideSignature = parseMethodSignature(annotation.getEntry("target"));
 
-            if (sig != null)
-                return sig;
+            if (overrideSignature != null) {
+                // Ensure the signatures are compatible
+                if (!Arrays.equals(overrideSignature.args, actualSignature.args)) {
+                    if (overrideSignature.args.length + 1 != actualSignature.args.length)
+                        throw new RuntimeException(String.format("Unreasonable signature declaration for method %s (actually %s)", overrideSignature.toString(), actualSignature.toString()));
+
+                    for (int i = 0; i < overrideSignature.args.length; ++i)
+                        if (!overrideSignature.args[i].equals(actualSignature.args[i]))
+                            throw new RuntimeException(String.format("Signature mismatch for method %s (actually %s)", overrideSignature.toString(), actualSignature.toString()));
+
+                    if (!actualSignature.args[overrideSignature.args.length].equals(overrideSignature.ret))
+                        throw new RuntimeException(String.format("Unreasonable additional argument declaration for method %s (actually %s)", overrideSignature.toString(), actualSignature.toString()));
+                }
+
+                if (!overrideSignature.ret.equals(actualSignature.ret))
+                    throw new RuntimeException(String.format("Unreasonable return declaration for method %s (actually %s)", overrideSignature.toString(), actualSignature.toString()));
+
+                // We have target signature override
+                // Use this instead of the actual method signature
+                return overrideSignature;
+            }
         }
 
         // Parse implicit signature
-        return Objects.requireNonNull(parseMethodSignature(node.name+node.desc));
+        return actualSignature;
     }
 
     @Nullable
@@ -559,7 +586,6 @@ public class Merger {
                 return Opcodes.ASTORE;
         }
     }
-
 
     protected static boolean fieldNodeEquals(FieldNode a, FieldNode b) {
         return a.name.equals(b.name) && Objects.equals(a.signature, b.signature);
