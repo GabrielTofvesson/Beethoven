@@ -1,7 +1,5 @@
 package dev.w1zzrd.asm;
 
-import com.sun.istack.internal.Nullable;
-import com.sun.org.apache.bcel.internal.generic.GETSTATIC;
 import jdk.internal.org.objectweb.asm.*;
 import jdk.internal.org.objectweb.asm.tree.*;
 import java.io.*;
@@ -25,7 +23,6 @@ public class Merger {
     private static final Pattern re_retTypes = Pattern.compile("((?:\\[*L(?:[a-zA-Z_$][a-zA-Z\\d_$]*/)*[a-zA-Z_$][a-zA-Z\\d_$]*;)|Z|B|C|S|I|J|F|D|V)");
 
     protected final ClassNode targetNode;
-    protected final ArrayList<MethodSig> extended = new ArrayList<>();
 
 
     public Merger(String targetClass) throws IOException {
@@ -225,18 +222,48 @@ public class Merger {
                             created = true;
                         }
 
-                        boolean isStaticMethod = (inject.access & Opcodes.ACC_STATIC) != 0;
+                        boolean isStaticMethod = isStatic(inject);
                         boolean keepReturn = annotation.hasEntry("acceptOriginalReturn") && (Boolean)annotation.getEntry("acceptOriginalReturn");
                         boolean hasReturn = !signature.ret.equals("V");
 
                         // Received return value
                         LocalVariableNode retNode = keepReturn && hasReturn ? inject.localVariables.get((isStaticMethod ? 0 : 1) + signature.args.length) : null;
+                        Optional<LocalVariableNode> retNode_decl = adapt.get().localVariables.stream().filter(it -> it.name.startsWith(" ")).findFirst();
 
+                        // Set the proper index and update maxLocals accordingly
+                        // This is done here so that injected calls to modify this variable use the correct index
                         if (keepReturn && hasReturn) {
-                            // Set the proper index and update maxLocals accordingly
-                            // This is done here so that injected calls to modify this variable use the correct index
-                            retNode.index = Math.max(retNode.index, adapt.get().localVariables.stream().mapToInt(it -> it.index).reduce(Math::max).orElse(0));
-                            inject.maxLocals = retNode.index + 1;
+                            if (retNode_decl.isPresent()) {
+                                // Extend scope of retNode variable
+                                retNode_decl.get().end = retNode.end;
+
+                                // Remove unnecessary retNode
+                                inject.localVariables.remove(retNode);
+                            }
+                            else {
+                                // Insert retNode at the lowest index that isn't "this"
+                                int lowestIndex = isStaticMethod ? 0 : 1;
+                                int original = retNode.index;
+                                retNode.index = lowestIndex;
+
+                                toAdapt
+                                        .stream()
+                                        .filter(it -> it instanceof VarInsnNode && ((VarInsnNode) it).var >= retNode.index)
+                                        .forEach(it -> ++((VarInsnNode) it).var);
+                                instr
+                                        .stream()
+                                        .filter(it -> it instanceof VarInsnNode && ((VarInsnNode) it).var >= retNode.index)
+                                        .forEach(it -> {
+                                            if (((VarInsnNode) it).var == original)
+                                                ((VarInsnNode) it).var = retNode.index;
+                                            else ++((VarInsnNode) it).var;
+                                        });
+
+                                inject.maxLocals = Math.max(inject.maxLocals, adapt.get().maxLocals);
+
+                                // Mark variable as retVal holder in the most lazy way I could think of
+                                retNode.name = ' ' + retNode.name;
+                            }
                         }
 
                         // If no goto instructions were added, just remove the added label
@@ -282,6 +309,9 @@ public class Merger {
                     inject.localVariables.add(origThis.get());
                     inject.localVariables.remove(injectThis.get());
                 }
+
+                // Ensure all locals have a unique name
+                inject.localVariables.forEach(it -> makeLocalUnique(it, inject.localVariables));
             }
         }
 
@@ -313,6 +343,7 @@ public class Merger {
 
     public byte[] toByteArray(int writerFlags) {
         ClassWriter writer = new ClassWriter(writerFlags);
+        targetNode.methods.forEach(method -> method.localVariables.forEach(var -> var.name = var.name.replace(" ", "")));
         targetNode.accept(writer);
 
         return writer.toByteArray();
@@ -358,7 +389,6 @@ public class Merger {
     }
 
 
-    @Nullable
     protected static SpecialCall getSpecialCall(MethodInsnNode node) {
         if (!node.owner.equals("dev/w1zzrd/asm/Merger")) return null;
 
@@ -375,7 +405,6 @@ public class Merger {
     }
 
 
-    @Nullable
     protected static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> annotationType, ClassNode cNode) {
         if(cNode.visibleAnnotations == null)
             return null;
@@ -397,7 +426,6 @@ public class Merger {
         return null;
     }
 
-    @Nullable
     protected static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> annotationType, MethodNode cNode) {
         if(cNode.visibleAnnotations == null)
             return null;
@@ -488,7 +516,11 @@ public class Merger {
         return actualSignature;
     }
 
-    @Nullable
+    protected static void makeLocalUnique(LocalVariableNode node, List<LocalVariableNode> other) {
+        while (other.stream().anyMatch(it -> it != node && it.name.equals(node.name)))
+            node.name = '$'+node.name;
+    }
+
     protected static MethodSig parseMethodSignature(String sig) {
         Matcher signatureMatcher = re_methodSignature.matcher(sig);
 
