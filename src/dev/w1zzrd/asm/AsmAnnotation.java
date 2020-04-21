@@ -3,7 +3,11 @@ package dev.w1zzrd.asm;
 import java.lang.annotation.Annotation;
 import java.util.Map;
 
-public final class AsmAnnotation<A extends Annotation> {
+/**
+ * Java ASM annotation data representation
+ * @param <A> Type of the annotation
+ */
+final class AsmAnnotation<A extends Annotation> {
     private final Class<A> annotationType;
     private final Map<String, Object> entries;
 

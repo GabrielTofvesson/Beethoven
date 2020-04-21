@@ -16,6 +16,9 @@ import static dev.w1zzrd.asm.Merger.SpecialCall.FIELD;
 import static dev.w1zzrd.asm.Merger.SpecialCall.SUPER;
 import static jdk.internal.org.objectweb.asm.ClassWriter.COMPUTE_MAXS;
 
+/**
+ * Class data merger/transformer
+ */
 public class Merger {
 
     private static final Pattern re_methodSignature = Pattern.compile("((?:[a-zA-Z_$][a-zA-Z\\d_$]+)|(?:<init>))\\(((?:(?:\\[*L(?:[a-zA-Z_$][a-zA-Z\\d_$]*/)*[a-zA-Z_$][a-zA-Z\\d_$]*;)|Z|B|C|S|I|J|F|D)*)\\)((?:\\[*L(?:[a-zA-Z_$][a-zA-Z\\d_$]*/)*[a-zA-Z_$][a-zA-Z\\d_$]*;)|Z|B|C|S|I|J|F|D|V)");
@@ -25,31 +28,63 @@ public class Merger {
     protected final ClassNode targetNode;
 
 
+    /**
+     * Create a merger for the given target class
+     * @param targetClass Class to transform
+     * @throws IOException If a .class file cannot be found as a resource
+     */
     public Merger(String targetClass) throws IOException {
         this(targetClass, ClassLoader.getSystemClassLoader());
     }
 
+    /**
+     * Create a merger for the given target class from the given loader
+     * @param targetClass Class to transform
+     * @param loader Loader to get class data resource from
+     * @throws IOException If a .class file cannot be found as a resource
+     */
     public Merger(String targetClass, ClassLoader loader) throws IOException {
         this(getClassNode(targetClass, loader));
     }
 
+    /**
+     * Create a merger for the given bytecode
+     * @param data Data to transform
+     */
     public Merger(byte[] data) {
         this(readClass(data));
     }
 
+    /**
+     * Create a merger for the given ClassNode
+     * @param targetNode ClassNode to transform
+     */
     public Merger(ClassNode targetNode) {
         this.targetNode = targetNode;
     }
 
 
+    /**
+     * Name of the target class
+     * @return Class name
+     */
     public String getTargetName() {
         return targetNode.name;
     }
 
+    /**
+     * Name of the superclass of the target class
+     * @return Superclass name
+     */
     public String getTargetSuperName() { return targetNode.superName; }
 
+    /**
+     * Inject/override method into the target class
+     * @param inject MethodNode to inject
+     * @param injectOwner Name of the class that owns the method being injected (for example "net.example.InjectClass")
+     */
     public void inject(MethodNode inject, String injectOwner) {
-        transformInjection(inject, injectOwner);
+        transformInjection(inject, injectOwner.replace('.', '/'));
 
         targetNode
                 .methods
@@ -61,6 +96,10 @@ public class Merger {
         targetNode.methods.add(inject);
     }
 
+    /**
+     * Inject/override a field into the target class
+     * @param inject Field to inject or override
+     */
     public void inject(FieldNode inject) {
         targetNode
                 .fields
@@ -72,14 +111,29 @@ public class Merger {
         targetNode.fields.add(inject);
     }
 
+    /**
+     * Inject a class into the target class using the given loader
+     * @param className Name of the class to inject
+     * @param loader Loader to get the resource from
+     * @throws IOException If a .class file cannot be found as a resource
+     */
     public void inject(String className, ClassLoader loader) throws IOException {
         inject(getClassNode(loader.getResource(className.replace('.', '/')+".class")));
     }
 
+    /**
+     * Full name (including packages) of the class to inject
+     * @param className Name of the class
+     * @throws IOException If a .class file cannot be found as a resource
+     */
     public void inject(String className) throws IOException {
         inject(className, ClassLoader.getSystemClassLoader());
     }
 
+    /**
+     * Inject {@link ClassNode} into the target class
+     * @param inject ClassNode to inject
+     */
     public void inject(ClassNode inject) {
         inject.methods.stream().filter(Merger::shouldInject).forEach(mNode -> inject(mNode, inject.name));
         inject.fields.stream().filter(Merger::shouldInject).forEach(this::inject);
@@ -104,10 +158,21 @@ public class Merger {
         }
     }
 
+    /**
+     * Attempt to inject all annotated methods, fields superclasses and interfaces from the given class
+     * @param inject Class to inject into the target
+     * @throws IOException If a .class file cannot be found as a resource
+     */
     public void inject(Class<?> inject) throws IOException {
         inject(getClassNode(inject.getResource(inject.getSimpleName()+".class")));
     }
 
+    /**
+     * Find a field in the target class
+     * @param fieldName Name of the field to find
+     * @return Signature of the found field
+     * @throws RuntimeException If no field could be found with the given name
+     */
     protected String resolveField(String fieldName) {
         for(FieldNode fNode : targetNode.fields)
             if (fNode.name.equals(fieldName))
@@ -116,9 +181,15 @@ public class Merger {
         throw new RuntimeException(String.format("There is no field \"%s\" in %s", fieldName, getTargetName()));
     }
 
+    /**
+     * Transform instructions, signature, annotations and local variables of the given {@link MethodNode}
+     * @param inject MethodNode to inject
+     * @param injectOwner Type name of the owner (injection) class
+     */
     protected void transformInjection(MethodNode inject, String injectOwner) {
         ArrayList<AbstractInsnNode> instr = new ArrayList<>();
 
+        // Adapt instructions
         for (int i = 0; i < inject.instructions.size(); ++i) {
             AbstractInsnNode node = inject.instructions.get(i);
             if (!(node instanceof LineNumberNode)) {
@@ -190,7 +261,7 @@ public class Merger {
                 adapt.get().instructions.iterator().forEachRemaining(toAdapt::add);
 
                 switch (injection) {
-                    case BEFORE: {
+                    case BEFORE: { // Inject method instructions before an existing method
                         LabelNode next;
                         boolean created = false;
                         if (toAdapt.size() > 0 && toAdapt.get(0) instanceof LabelNode)
@@ -211,7 +282,7 @@ public class Merger {
                         break;
                     }
 
-                    case AFTER: {
+                    case AFTER: { // Inject method instructions after an existing method
                         LabelNode next;
                         boolean created = false;
                         if (toAdapt.size() > 0 && instr.get(0) instanceof LabelNode)
@@ -315,12 +386,12 @@ public class Merger {
             }
         }
 
-        InsnList collect = new InsnList();
+        // Collect instructions
+        inject.instructions = new InsnList();
         for(AbstractInsnNode node : instr)
-            collect.add(node);
+            inject.instructions.add(node);
 
-        inject.instructions = collect;
-
+        // Ensure local variables don't reference injection class
         inject.localVariables.forEach(var -> {
             if (var.desc.equals("L"+injectOwner+";"))
                 var.desc = "L"+getTargetName()+";";
@@ -331,16 +402,30 @@ public class Merger {
         inject.desc = '(' + signature.args_literal + ')' + signature.ret;
     }
 
+    /**
+     * Check if the given class is annotated to be injected into the targeted class
+     * @param inject ClassNode to check for annotations
+     * @return True if injection class is annotated with {@link InjectClass} and the value is the type of the targeted class
+     */
     public boolean shouldInject(ClassNode inject) {
         AsmAnnotation<InjectClass> injectAnnotation = getAnnotation(InjectClass.class, inject);
         return injectAnnotation != null &&
                 ((Type)injectAnnotation.getEntry("value")).getClassName().equals(getTargetName());
     }
 
+    /**
+     * Compile target class data to a byte array
+     * @return Class data
+     */
     public byte[] toByteArray() {
         return toByteArray(COMPUTE_MAXS);
     }
 
+    /**
+     * Compile target class data to a byte array
+     * @param writerFlags Flags to pass to the {@link ClassWriter} used to compile the target class
+     * @return Class data
+     */
     public byte[] toByteArray(int writerFlags) {
         ClassWriter writer = new ClassWriter(writerFlags);
         targetNode.methods.forEach(method -> method.localVariables.forEach(var -> var.name = var.name.replace(" ", "")));
@@ -349,10 +434,19 @@ public class Merger {
         return writer.toByteArray();
     }
 
+    /**
+     * Compile target class data to byte array and load with system class loader
+     * @return Class loaded by the loader
+     */
     public Class<?> compile() {
         return compile(ClassLoader.getSystemClassLoader());
     }
 
+    /**
+     * Compile target class data to byte array and load with the given class loader
+     * @param loader Loader to use when loading the class
+     * @return Class loaded by the loader
+     */
     public Class<?> compile(ClassLoader loader) {
         Method m = null;
         try {
@@ -375,20 +469,45 @@ public class Merger {
     }
 
     // To be used instead of referencing object constructs
+
+    /**
+     * Reference a non-primitive field in the target class with the given name
+     * @param name Name of the field to get
+     * @return Nothing
+     */
     public static Object field(String name) {
         throw new RuntimeException("Field not injected");
     }
 
+    /**
+     * Inform injector that the next call to a given method should be addressed to the target class' superclass
+     * @param superMethodName Method name of the target superclass to invoke
+     */
     public static void superCall(String superMethodName){
         throw new RuntimeException("Super call not injected");
     }
 
 
+    /**
+     * Special transformer calls
+     */
     enum SpecialCall {
-        FIELD, SUPER
+        /**
+         * Indicates a call to {@link #field(String)}
+         */
+        FIELD,
+        /**
+         * Indicates a call to {@link #superCall(String)}
+         */
+        SUPER
     }
 
 
+    /**
+     * Check if a call for an injector instruction has been made
+     * @param node Instruction node to check
+     * @return Call type to transform
+     */
     protected static SpecialCall getSpecialCall(MethodInsnNode node) {
         if (!node.owner.equals("dev/w1zzrd/asm/Merger")) return null;
 
@@ -405,33 +524,21 @@ public class Merger {
     }
 
 
+    /**
+     * Gets a simple representation of an annotation for a given ClassNode
+     * @param annotationType Type of the annotation to find
+     * @param cNode ClassNode to find annotation in
+     * @param <T> Type of the annotation
+     * @return {@link AsmAnnotation} representing the annotation found or {@literal null} if no annotation of the requested type could not be found.
+     */
     protected static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> annotationType, ClassNode cNode) {
         if(cNode.visibleAnnotations == null)
             return null;
 
+        // Internal class name representation to look for
         String targetAnnot = 'L' + annotationType.getTypeName().replace('.', '/') + ';';
 
-        for (AnnotationNode aNode : cNode.visibleAnnotations)
-            if (aNode.desc.equals(targetAnnot)) {
-                HashMap<String, Object> map = new HashMap<>();
-
-                // Collect annotation values
-                if (aNode.values != null)
-                    for (int i = 1; i < aNode.values.size(); i+=2)
-                        map.put((String)aNode.values.get(i - 1), aNode.values.get(i));
-
-                return new AsmAnnotation<>(annotationType, map);
-            }
-
-        return null;
-    }
-
-    protected static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> annotationType, MethodNode cNode) {
-        if(cNode.visibleAnnotations == null)
-            return null;
-
-        String targetAnnot = 'L' + annotationType.getTypeName().replace('.', '/') + ';';
-
+        // Check all annotations
         for (AnnotationNode aNode : cNode.visibleAnnotations)
             if (aNode.desc.equals(targetAnnot)) {
                 HashMap<String, Object> map = new HashMap<>();
@@ -439,33 +546,34 @@ public class Merger {
                 // Collect annotation values
                 if (aNode.values != null)
                     NODE_LOOP:
-                    for (int i = 1; i < aNode.values.size(); i+=2) {
-                        String key = (String) aNode.values.get(i - 1);
-                        Object toPut = aNode.values.get(i);
+                            for (int i = 1; i < aNode.values.size(); i+=2) {
+                                String key = (String) aNode.values.get(i - 1);
+                                Object toPut = aNode.values.get(i);
 
-                        if (toPut instanceof String[] && ((String[]) toPut).length == 2) {
-                            String enumType = ((String[])toPut)[0];
-                            String enumName = ((String[])toPut)[1];
-                            if (enumType.startsWith("L") && enumType.endsWith(";"))
-                                try{
-                                    Class<?> type = Class.forName(enumType.substring(1, enumType.length()-1).replace('/', '.'));
-                                    Method m = Enum.class.getDeclaredMethod("name");
-                                    Object[] values = (Object[]) type.getDeclaredMethod("values").invoke(null);
+                                // Attempt to parse non-primitive data type to its actual type
+                                if (toPut instanceof String[] && ((String[]) toPut).length == 2) {
+                                    String enumType = ((String[])toPut)[0];
+                                    String enumName = ((String[])toPut)[1];
+                                    if (enumType.startsWith("L") && enumType.endsWith(";"))
+                                        try{
+                                            Class<?> type = Class.forName(enumType.substring(1, enumType.length()-1).replace('/', '.'));
+                                            Method m = Enum.class.getDeclaredMethod("name");
+                                            Object[] values = (Object[]) type.getDeclaredMethod("values").invoke(null);
 
-                                    for (Object value : values)
-                                        if (m.invoke(value).equals(enumName)) {
-                                            map.put(key, value);
-                                            continue NODE_LOOP;
+                                            for (Object value : values)
+                                                if (m.invoke(value).equals(enumName)) {
+                                                    map.put(key, value);
+                                                    continue NODE_LOOP;
+                                                }
+
+                                        } catch (Throwable e) {
+                                            /* Just ignore */
                                         }
-
-                                } catch (Throwable e) {
-                                    /* Just ignore */
                                 }
-                        }
 
-                        // Default insertion policy
-                        map.put(key, toPut);
-                    }
+                                // Default insertion policy
+                                map.put(key, toPut);
+                            }
 
                 return new AsmAnnotation<>(annotationType, map);
             }
@@ -473,14 +581,86 @@ public class Merger {
         return null;
     }
 
+    /**
+     * Gets a simple representation of an annotation for a given MethodNode
+     * @param annotationType Type of the annotation to find
+     * @param mNode ClassNode to find annotation in
+     * @param <T> Type of the annotation
+     * @return {@link AsmAnnotation} representing the annotation found or {@literal null} if no annotation of the requested type could not be found.
+     */
+    protected static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> annotationType, MethodNode mNode) {
+        if(mNode.visibleAnnotations == null)
+            return null;
+
+        String targetAnnot = 'L' + annotationType.getTypeName().replace('.', '/') + ';';
+
+        // Internal class name representation to look for
+        for (AnnotationNode aNode : mNode.visibleAnnotations)
+            if (aNode.desc.equals(targetAnnot)) {
+                HashMap<String, Object> map = new HashMap<>();
+
+                // Collect annotation values
+                if (aNode.values != null)
+                    NODE_LOOP:
+                            for (int i = 1; i < aNode.values.size(); i+=2) {
+                                String key = (String) aNode.values.get(i - 1);
+                                Object toPut = aNode.values.get(i);
+
+                                // Attempt to parse non-primitive data type to its actual type
+                                if (toPut instanceof String[] && ((String[]) toPut).length == 2) {
+                                    String enumType = ((String[])toPut)[0];
+                                    String enumName = ((String[])toPut)[1];
+                                    if (enumType.startsWith("L") && enumType.endsWith(";"))
+                                        try{
+                                            Class<?> type = Class.forName(enumType.substring(1, enumType.length()-1).replace('/', '.'));
+                                            Method m = Enum.class.getDeclaredMethod("name");
+                                            Object[] values = (Object[]) type.getDeclaredMethod("values").invoke(null);
+
+                                            for (Object value : values)
+                                                if (m.invoke(value).equals(enumName)) {
+                                                    map.put(key, value);
+                                                    continue NODE_LOOP;
+                                                }
+
+                                        } catch (Throwable e) {
+                                            /* Just ignore */
+                                        }
+                                }
+
+                                // Default insertion policy
+                                map.put(key, toPut);
+                            }
+
+                return new AsmAnnotation<>(annotationType, map);
+            }
+
+        return null;
+    }
+
+    /**
+     * Check semantic equality of two method nodes
+     * @param a First method node
+     * @param b Second method node
+     * @return True of the two method nodes represent the same method
+     */
     protected static boolean methodNodeEquals(MethodNode a, MethodNode b) {
         return getSignature(a).equals(getSignature(b)) && (isStatic(a) == isStatic(b));
     }
 
+    /**
+     * Check if method node is static
+     * @param node Node to check
+     * @return True if the node is declared as static
+     */
     protected static boolean isStatic(MethodNode node) {
         return (node.access & Opcodes.ACC_STATIC) != 0;
     }
 
+    /**
+     * Parse the targeted or actual method signature of a method node
+     * @param node Node to parse signature of
+     * @return Parsed signature from {@link Inject#target()} (if it exists and is valid), otherwise the actual signature
+     */
     protected static MethodSig getSignature(MethodNode node) {
         AsmAnnotation<Inject> annotation = getAnnotation(Inject.class, node);
         MethodSig actualSignature = Objects.requireNonNull(parseMethodSignature(node.name + node.desc));
@@ -516,11 +696,21 @@ public class Merger {
         return actualSignature;
     }
 
+    /**
+     * Change the variable name to ensure that it is unique
+     * @param node Node to change the name of (if necessary)
+     * @param other All the local variables in the relevant method node
+     */
     protected static void makeLocalUnique(LocalVariableNode node, List<LocalVariableNode> other) {
         while (other.stream().anyMatch(it -> it != node && it.name.equals(node.name)))
             node.name = '$'+node.name;
     }
 
+    /**
+     * Parse the signature of a method to a {@link MethodSig}
+     * @param sig String representation of the signature (e.g. {@code getMethodName(IIZ)Ljava/lang/String;} would represent {@code String getMethodName(int, int, boolean)})
+     * @return Parsed signature
+     */
     protected static MethodSig parseMethodSignature(String sig) {
         Matcher signatureMatcher = re_methodSignature.matcher(sig);
 
@@ -528,6 +718,7 @@ public class Merger {
             String name = signatureMatcher.group(1);
             String ret = signatureMatcher.group(3);
 
+            // Match arguments
             Matcher argMatcher = re_types.matcher(signatureMatcher.group(2));
             ArrayList<String> args = new ArrayList<>();
             while (argMatcher.find())
@@ -572,7 +763,11 @@ public class Merger {
     }
 
 
-
+    /**
+     * Resolve a type for a frame
+     * @param typeString String representation of the type to resolve
+     * @return Corresponding Opcode or String representing the type given
+     */
     protected static Object resolveFrameType(String typeString) {
         Type sigType = Type.getType(typeString);
         switch (sigType.getSort()) {
@@ -595,6 +790,11 @@ public class Merger {
         }
     }
 
+    /**
+     * Resolve bytecode instruction to use when storing a type to a variable
+     * @param typeString Type to store to a variable
+     * @return Bytecode instruction or -1 if the type is void
+     */
     protected static int resolveStoreInstr(String typeString) {
         switch (typeString) {
             case "Z":
@@ -619,10 +819,21 @@ public class Merger {
         }
     }
 
+    /**
+     * Check if two field nodes are semantically equivalent
+     * @param a First field node
+     * @param b Second field node
+     * @return True of the node have the same signature and name
+     */
     protected static boolean fieldNodeEquals(FieldNode a, FieldNode b) {
         return a.name.equals(b.name) && Objects.equals(a.signature, b.signature);
     }
 
+    /**
+     * Check if the given method node should be injected into the target class
+     * @param node Node to check
+     * @return True if it should, else false
+     */
     protected static boolean shouldInject(MethodNode node) {
         if (node.visibleAnnotations == null) return false;
 
@@ -635,6 +846,11 @@ public class Merger {
         return false;
     }
 
+    /**
+     * Check if the given field node should be injected into the target class
+     * @param node Node to check
+     * @return True if it should, else false
+     */
     protected static boolean shouldInject(FieldNode node) {
         if (node.visibleAnnotations == null) return false;
 
@@ -647,6 +863,14 @@ public class Merger {
         return false;
     }
 
+    /**
+     * Replace/remove return instructions from a given set of instruction nodes
+     * @param instr Instructions to transform
+     * @param jumpReplace Label to jump to instead of returning
+     * @param popReturn Whether or not to simply pop the return value from the stack before jump
+     * @param storeNode Local variable to store the return value to if this has been requested
+     * @return True if any jump instructions were added, else false
+     */
     protected static boolean removeReturn(List<AbstractInsnNode> instr, LabelNode jumpReplace, boolean popReturn, LocalVariableNode storeNode) {
         ListIterator<AbstractInsnNode> iter = instr.listIterator();
         JumpInsnNode finalJump = null;
@@ -678,6 +902,11 @@ public class Merger {
         return keepLabel <= 1;
     }
 
+    /**
+     * Remove side-effect free load instructions
+     * @param iter Instructions to analyze
+     * @return True if the load was removed, else false
+     */
     protected static boolean removeRedundantLoad(ListIterator<AbstractInsnNode> iter) {
         boolean hasEffects = false;
         int iterCount = 0;
@@ -706,32 +935,75 @@ public class Merger {
         return hasEffects;
     }
 
+    /**
+     * Get a glass node from a given resource
+     * @param url Resource to load class node from
+     * @return Class node loaded from the resource
+     * @throws IOException If the resource cannot be loaded
+     */
     public static ClassNode getClassNode(URL url) throws IOException {
         return readClass(getClassBytes(url));
     }
 
+    /**
+     * Read class data to a class node
+     * @param data Bytecode to read
+     * @return Class node read
+     */
     public static ClassNode readClass(byte[] data) {
         ClassNode node = new ClassNode();
         new ClassReader(data).accept(node, 0);
         return node;
     }
 
+    /**
+     * Read a class node from a given class
+     * @param name Name of the class to get the class node from
+     * @return Loaded class node
+     * @throws IOException If the class data resource cannot be loaded
+     */
     public static ClassNode getClassNode(String name) throws IOException {
         return readClass(getClassBytes(name));
     }
 
+    /**
+     * Read a class node from a given class
+     * @param name Name of the class to get the class node from
+     * @param loader Loader to use when loading the class resource
+     * @return Loaded class node
+     * @throws IOException If the class data resource cannot be loaded
+     */
     public static ClassNode getClassNode(String name, ClassLoader loader) throws IOException {
         return readClass(getClassBytes(name, loader));
     }
 
+    /**
+     * Get class bytecode for a given class
+     * @param name Name of the class to get data for
+     * @return Bytecode for the requested class
+     * @throws IOException If the class data resource cannot be loaded
+     */
     public static byte[] getClassBytes(String name) throws IOException {
         return getClassBytes(name, ClassLoader.getSystemClassLoader());
     }
 
+    /**
+     * Get class bytecode for a given class
+     * @param name Name of the class to get data for
+     * @param loader Loader to use when loading the class resource
+     * @return Bytecode for the requested class
+     * @throws IOException If the class data resource cannot be loaded
+     */
     public static byte[] getClassBytes(String name, ClassLoader loader) throws IOException {
         return getClassBytes(Objects.requireNonNull(loader.getResource(name.replace('.', '/') + ".class")));
     }
 
+    /**
+     * Get class bytecode for a given class
+     * @param url Resource to load class data from
+     * @return Bytecode for the requested class resource
+     * @throws IOException If the class data resource cannot be loaded
+     */
     public static byte[] getClassBytes(URL url) throws IOException {
         InputStream stream = url.openStream();
         byte[] classData = new byte[stream.available()];
