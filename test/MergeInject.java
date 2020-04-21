@@ -1,5 +1,6 @@
 import dev.w1zzrd.asm.InjectClass;
 import dev.w1zzrd.asm.Inject;
+
 import static dev.w1zzrd.asm.InPlaceInjection.*;
 
 @InjectClass(value = MergeTest.class)
@@ -27,11 +28,14 @@ public class MergeInject extends MergeTest implements Runnable {
     public String test(String retVal){
         System.out.println("Got retval: "+retVal);
 
-        if (retVal.equals("Test")) {
-            System.out.println("Test");
+        if (retVal.endsWith("e!!Test")) {
+            System.out.println("Special case!");
+            return "Not Modified?";
         }
 
         retVal = "ASDF";
+
+        System.out.println("Eyyyy");
 
         String a = "retVal";
 
@@ -56,6 +60,10 @@ public class MergeInject extends MergeTest implements Runnable {
         System.out.println("Another injection: "+retVal);
         return retVal;
     }
+
+
+
+
 
 
 
