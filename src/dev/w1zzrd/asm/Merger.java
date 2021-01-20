@@ -1,5 +1,6 @@
 package dev.w1zzrd.asm;
 
+import dev.w1zzrd.asm.analysis.AsmAnnotation;
 import jdk.internal.org.objectweb.asm.*;
 import jdk.internal.org.objectweb.asm.tree.*;
 import java.io.*;
@@ -26,6 +27,8 @@ public class Merger {
     private static final Pattern re_retTypes = Pattern.compile("((?:\\[*L(?:[a-zA-Z_$][a-zA-Z\\d_$]*/)*[a-zA-Z_$][a-zA-Z\\d_$]*;)|Z|B|C|S|I|J|F|D|V)");
 
     protected final ClassNode targetNode;
+
+    private final HashMap<MethodNode, Integer> overrideCount = new HashMap<>();
 
 
     /**
@@ -228,7 +231,9 @@ public class Merger {
                     // Attempt to fix injector ownership
                     for(Field f : node.getClass().getFields()) {
                         try {
-                            if (f.getName().equals("owner") && f.getType().equals(String.class) && f.get(node).equals(injectOwner))
+                            f.setAccessible(true);
+                            if (f.getName().equals("owner") && f.getType().equals(String.class) &&
+                                    f.get(node).equals(injectOwner))
                                 f.set(node, getTargetName());
                         } catch (IllegalAccessException e) {
                             e.printStackTrace();
@@ -457,6 +462,7 @@ public class Merger {
 
         assert m != null;
         m.setAccessible(true);
+        //ReflectCompat.setAccessible(m, true);
 
         byte[] data = toByteArray();
 
@@ -952,7 +958,7 @@ public class Merger {
      */
     public static ClassNode readClass(byte[] data) {
         ClassNode node = new ClassNode();
-        new ClassReader(data).accept(node, 0);
+        new ClassReader(data).accept(node, ClassReader.EXPAND_FRAMES);
         return node;
     }
 

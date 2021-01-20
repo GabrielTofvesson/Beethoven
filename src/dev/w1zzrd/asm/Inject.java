@@ -4,8 +4,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-
-import static dev.w1zzrd.asm.InPlaceInjection.REPLACE;
+import static dev.w1zzrd.asm.InPlaceInjection.INJECT;
 
 /**
  * Mark a field or method for injection into a target
@@ -17,7 +16,7 @@ public @interface Inject {
      * How to inject the method. Note: not valid for fields
      * @return {@link InPlaceInjection}
      */
-    InPlaceInjection value() default REPLACE;
+    InPlaceInjection value() default INJECT;
 
     /**
      * Explicit method target signature. Note: not valid for fields

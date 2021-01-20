@@ -1,0 +1,141 @@
+package dev.w1zzrd.asm;
+
+import dev.w1zzrd.asm.analysis.AsmAnnotation;
+import dev.w1zzrd.asm.signature.MethodSignature;
+import jdk.internal.org.objectweb.asm.tree.AnnotationNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.FieldNode;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+public final class GraftSource {
+    private final String typeName;
+    private final HashMap<MethodNode, List<AsmAnnotation<?>>> methodAnnotations;
+    private final HashMap<FieldNode, List<AsmAnnotation<?>>> fieldAnnotations;
+
+    public GraftSource(ClassNode source) {
+        this.typeName = source.name;
+
+        methodAnnotations = new HashMap<>();
+        for (MethodNode mNode : source.methods)
+        {
+            List<AsmAnnotation<?>> annotations = parseAnnotations(mNode.visibleAnnotations);
+            if (hasNoInjectionDirective(annotations))
+                continue;
+
+            methodAnnotations.put(mNode, annotations);
+        }
+
+        fieldAnnotations = new HashMap<>();
+        for (FieldNode fNode : source.fields)
+        {
+            List<AsmAnnotation<?>> annotations = parseAnnotations(fNode.visibleAnnotations);
+            if (hasNoInjectionDirective(annotations))
+                continue;
+
+            fieldAnnotations.put(fNode, annotations);
+        }
+    }
+
+    public String getTypeName() {
+        return typeName;
+    }
+
+    public String getMethodTarget(MethodNode node) {
+        if (methodAnnotations.containsKey(node)) {
+            String target = getInjectionDirective(methodAnnotations.get(node)).getEntry("target");
+            if (target != null && target.length() != 0)
+                return target;
+        }
+
+        return node.name + node.desc;
+    }
+
+    public String getMethodTargetName(MethodNode node) {
+        String target = getMethodTarget(node);
+
+        if (target.contains("("))
+            return target.substring(0, target.indexOf('('));
+
+        return target;
+    }
+
+    public MethodSignature getMethodTargetSignature(MethodNode node) {
+        String target = getMethodTarget(node);
+
+        if (target.contains("("))
+            return new MethodSignature(target.substring(target.indexOf('(')));
+
+        return new MethodSignature(node.desc);
+    }
+
+    public boolean isMethodInjected(String name, String desc) {
+        return getInjectedMethod(name, desc) != null;
+    }
+
+    public @Nullable MethodNode getInjectedMethod(String name, String desc) {
+        return methodAnnotations
+                .keySet()
+                .stream()
+                .filter(it -> it.name.equals(name) && it.desc.equals(desc))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public String getMethodTargetName(String name, String desc) {
+        final MethodNode inject = getInjectedMethod(name, desc);
+        return inject == null ? name : getMethodTargetName(inject);
+    }
+
+    public String getFieldTargetName(FieldNode node) {
+        if (fieldAnnotations.containsKey(node)) {
+            String target = getInjectionDirective(fieldAnnotations.get(node)).getEntry("target");
+            if (target != null && target.length() != 0)
+                return target;
+        }
+
+        return node.name;
+    }
+
+    public List<AsmAnnotation<?>> getMethodAnnotations(MethodNode node) {
+        return methodAnnotations.get(node);
+    }
+
+    public List<AsmAnnotation<?>> getFieldAnnotations(FieldNode node) {
+        return fieldAnnotations.get(node);
+    }
+
+    public Set<MethodNode> getInjectMethods() {
+        return methodAnnotations.keySet();
+    }
+
+    public Set<FieldNode> getInjectFields() {
+        return fieldAnnotations.keySet();
+    }
+
+    public AsmAnnotation<Inject> getInjectAnnotation(MethodNode node) {
+        return getInjectionDirective(methodAnnotations.get(node));
+    }
+
+    private static boolean hasNoInjectionDirective(List<AsmAnnotation<?>> annotations) {
+        return getInjectionDirective(annotations) == null;
+    }
+
+    private static AsmAnnotation<Inject> getInjectionDirective(List<AsmAnnotation<?>> annotations) {
+        for (AsmAnnotation<?> annot : annotations)
+            if (annot.getAnnotationType() == Inject.class)
+                return (AsmAnnotation<Inject>) annot;
+
+        return null;
+    }
+
+    private static List<AsmAnnotation<?>> parseAnnotations(List<AnnotationNode> annotations) {
+        return annotations == null ? new ArrayList<>() : annotations.stream().map(AsmAnnotation::getAnnotation).collect(Collectors.toList());
+    }
+}

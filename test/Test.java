@@ -1,11 +1,28 @@
+import dev.w1zzrd.asm.Combine;
+import dev.w1zzrd.asm.GraftSource;
 import dev.w1zzrd.asm.Merger;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 
 public class Test {
     public static void main(String... args) throws IOException {
+
+        ClassNode target = Merger.getClassNode("MergeTest");
+        ClassNode inject = Merger.getClassNode("MergeInject");
+        GraftSource source = new GraftSource(target);
+
+        Combine combine = new Combine(target);
+        for (MethodNode method : source.getInjectMethods()) {
+            combine.inject(method, source);
+        }
+
+        combine.compile();
+
+        System.out.println("Asdf");
+
+        /*
         Merger m = new Merger("MergeTest");
         m.inject("MergeInject");
 
@@ -22,5 +39,7 @@ public class Test {
 
         Runnable r = (Runnable)new MergeTest("Constructor message");
         r.run();
+        */
     }
+
 }

@@ -17,5 +17,15 @@ public enum InPlaceInjection {
     /**
      * Replace method instructions in target method
      */
-    REPLACE
+    REPLACE,
+
+    /**
+     * Insert method into class. This does not allow overwrites
+     */
+    INSERT,
+
+    /**
+     * Inserts a method if it does not exist in the class, otherwise replace it
+     */
+    INJECT
 }
