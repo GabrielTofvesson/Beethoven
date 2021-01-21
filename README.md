@@ -14,11 +14,11 @@ methods and fields.
 * Method insertion (basic)
 
 * Method replacement (basic)
+  
+* In-place method appending
+  
+* Automatic injection of INVOKEDYNAMIC lambda targets
 
 ### TODO
   
 * In-place method prepending
-
-* In-place method appending
-
-* Automatic injection of INVOKEDYNAMIC lambda targets
