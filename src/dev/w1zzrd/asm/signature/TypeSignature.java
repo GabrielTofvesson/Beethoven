@@ -88,20 +88,33 @@ public class TypeSignature {
      */
     public TypeSignature(@Nullable Character primitive, boolean isTop) {
         if (primitive != null) {
-            switch (primitive) {
+            switch (Character.toUpperCase(primitive)) {
                 case 'J':
                 case 'D':
                 case 'V':
                     break;
 
+                case 'I':
+                case 'F':
+                case 'S':
+                case 'Z':
+                case 'C':
+                case 'B':
+                    if (isTop)
+                        throw new TypeSignatureParseException(String.format(
+                                "Primitive type signature %c cannot have a Top value. To declare a Top delimiter, use 'V'",
+                                primitive
+                        ));
+                    break;
+
                 default:
                     throw new TypeSignatureParseException(String.format(
-                            "Primitive type signature %s cannot have a Top value. To declare a Top delimiter, use 'V'",
-                            primitive.toString()
+                            "Unknown primitive signature %c",
+                            primitive
                     ));
             }
         }
-        this.sig = primitive == null ? "V" : primitive.toString();
+        this.sig = primitive == null ? "V" : Character.toString(Character.toUpperCase(primitive));
         modifier = TypeModifier.TOP.iff(isTop);
         dynamicRef = null;
         this.arrayDepth = 0;

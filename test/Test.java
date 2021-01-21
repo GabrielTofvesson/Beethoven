@@ -1,16 +1,24 @@
 import dev.w1zzrd.asm.Combine;
 import dev.w1zzrd.asm.GraftSource;
 import dev.w1zzrd.asm.Merger;
+import dev.w1zzrd.asm.analysis.FrameState;
+import dev.w1zzrd.asm.signature.TypeSignature;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
 
 import java.io.IOException;
+import java.util.Stack;
 
 public class Test {
     public static void main(String... args) throws IOException {
 
         ClassNode target = Merger.getClassNode("MergeTest");
         ClassNode inject = Merger.getClassNode("MergeInject");
+
+        MethodNode stackTest = target.methods.stream().filter(it -> it.name.equals("stackTest")).findFirst().get();
+
+        Stack<TypeSignature> stack = FrameState.getFrameStateAt(stackTest.instructions.getLast().getPrevious().getPrevious().getPrevious().getPrevious().getPrevious(), stackTest.localVariables);
+
         GraftSource source = new GraftSource(target);
 
         Combine combine = new Combine(target);

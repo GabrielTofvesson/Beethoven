@@ -7,11 +7,13 @@ import jdk.internal.org.objectweb.asm.Label;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.*;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Predicate;
 
@@ -69,11 +71,8 @@ public class FrameState {
             "??????????????????????????????????????????????MMMMMMMMIJFDLIIIIJJJJFFFFDDDDLLLL12345111$K$$$XXXKCVBNCVBNCVBNCVBNCVBNCVBNCVCVCVCVCVCV?IIIJJJFFFDDDIIIVBBNNIIIIIICCCCCC00?????IJFDL??XLXXXXXX?IILLLLLLXXLL??";
 
 
-    private final Stack<TypeSignature> stack = new Stack<>();
-    private final ArrayList<TypeSignature> locals = new ArrayList<>();
-    private final int stackSize;
-
-    private FrameState(AbstractInsnNode targetNode, List<TypeSignature> constants) {
+    public static Stack<TypeSignature> getFrameStateAt(AbstractInsnNode targetNode, List<LocalVariableNode> locals) {
+        Stack<TypeSignature> stack = new Stack<>();
         AbstractInsnNode first = targetNode, tmp;
 
         // Computation is already O(n), no need to accept first instruction as an argument
@@ -115,13 +114,8 @@ public class FrameState {
         // We now have a proposed set of instructions that might run if the instructions were to be called
         // Next, we analyse the stack and locals throughout the execution of these instructions
         while (!simulate.isEmpty()) {
-            if (simulate.peek() instanceof FrameNode)
-                stackSize = ((FrameNode) simulate.peek()).stack.size();
-
-            updateFrameState(simulate.pop(), stack, locals, constants);
+            updateFrameState(simulate.pop(), stack, locals);
         }
-
-        this.stackSize = stackSize;
 
         // The stack and locals are now in the state they would be in after the target instruction is hit
         // QED or something...
@@ -158,6 +152,39 @@ public class FrameState {
          * Also note that this kind of behaviour cannot be predicted due to the halting problem, so any program which
          * exhibits the aforementioned behaviour is inherently unpredictable.
          */
+
+        return stack;
+    }
+
+    /**
+     * Get a list of all local variables currently in scope at a given instruction
+     * @param insn Instruction to get local variable scope for
+     * @param allLocals All local variables in method
+     * @return A subset of all local variables such that accessing any value in said subset would not be an error
+     */
+    public static List<LocalVariableNode> localsAt(AbstractInsnNode insn, List<LocalVariableNode> allLocals) {
+        ArrayList<LocalVariableNode> collect = new ArrayList<>();
+
+        for (LocalVariableNode vNode : allLocals) {
+            // Find relative index of start of variable scope
+            Integer start = relativeIndexOf(insn, vNode.start);
+
+            // If start of scope could not be found, or it begins after the given instruction, it's not in scope
+            if (start == null || start > 0)
+                continue;
+
+            // Find relative index of end of variable scope
+            Integer end = relativeIndexOf(insn, vNode.end);
+
+            // If end of scope could not be found, or it ends before the given instruction, it's not in scope
+            if (end == null || end < 0)
+                continue;
+
+            // Scope starts at (or before) given instruction and ends at (or after) given instruction
+            collect.add(vNode);
+        }
+
+        return collect;
     }
 
     /**
@@ -182,33 +209,33 @@ public class FrameState {
      * @param instruction Instruction to "simulate"
      * @param stack Frame stack values
      * @param locals Frame local variables
-     * @param constants Method constant pool types
      */
     private static void updateFrameState(
             AbstractInsnNode instruction,
             Stack<TypeSignature> stack,
-            ArrayList<TypeSignature> locals,
-            List<TypeSignature> constants
+            List<LocalVariableNode> locals
     ) {
         if (instruction instanceof FrameNode) {
             // Stack values are always updated at a FrameNode
             stack.clear();
 
-            switch (instruction.getType()) {
+            // This is VERY different from getType() declared in AbstractInsnNode
+            switch (((FrameNode) instruction).type) {
                 case Opcodes.F_NEW:
                 case Opcodes.F_FULL:
+                case Opcodes.F_SAME: // This feels like undocumented behaviour
                     // Since this is a full frame, we start anew
-                    locals.clear();
+                    //locals.clear();
 
                     // Ascertain stack types
                     appendTypes(((FrameNode) instruction).stack, stack, true);
 
                     // Ascertain local types
-                    appendTypes(((FrameNode) instruction).local, locals, false);
+                    //appendTypes(((FrameNode) instruction).local, locals, false);
                     break;
 
                 case Opcodes.F_APPEND:
-                    appendTypes(((FrameNode) instruction).local, locals, false);
+                    //appendTypes(((FrameNode) instruction).local, locals, false);
                     break;
 
                 case Opcodes.F_SAME1:
@@ -216,13 +243,15 @@ public class FrameState {
                     break;
 
                 case Opcodes.F_CHOP:
+                    /*
                     List<Object> local = ((FrameNode) instruction).local;
                     if (local != null)
                         while (local.size() > locals.size())
                             locals.remove(locals.size() - 1);
+                     */
                     break;
             }
-        } else clobberStack(instruction, stack, locals, constants);
+        } else clobberStack(instruction, stack, locals);
     }
 
     /**
@@ -234,9 +263,16 @@ public class FrameState {
     private static void appendTypes(List<Object> types, List<TypeSignature> appendTo, boolean skipNulls) {
         if (types == null) return;
 
-        for (Object o : types)
+        for (Object o : types) {
             if (o == null && skipNulls) break;
-            else appendTo.add(o == null ? null : parseFrameSignature(o));
+            else if (o == null) appendTo.add(null);
+            else {
+                TypeSignature sig = parseFrameSignature(o);
+                appendTo.add(sig);
+                if (sig.stackFrameElementWith() == 2)
+                    appendTo.add(new TypeSignature(sig.getSig().charAt(0), true));
+            }
+        }
     }
 
     /**
@@ -278,8 +314,7 @@ public class FrameState {
     private static void clobberStack(
             AbstractInsnNode insn,
             List<TypeSignature> stack,
-            List<TypeSignature> locals,
-            List<TypeSignature> constants
+            List<LocalVariableNode> locals
     ) {
         // Look, before you go ahead and roast my code, just know that I have a "code first, think later" mentality,
         // so this entire method was essentially throw together and structured this way before I realised what I was
@@ -298,6 +333,7 @@ public class FrameState {
                 // Complex argument and result
                 // This behaviour is exhibited by 11 instructions in the JVM 8 spec
                 int argCount = 0;
+                MethodSignature msig = null;
                 switch (opcode) {
                     case Opcodes.DUP2:
                     case Opcodes.DUP2_X1:
@@ -307,12 +343,16 @@ public class FrameState {
                         stack.add(stack.size() - (opcode - 90), stack.get(stack.size() - 2));
                         break;
 
+                    case Opcodes.INVOKEDYNAMIC:
+                        msig = new MethodSignature(((InvokeDynamicInsnNode) insn).desc);
+                        argCount = -1;
                     case Opcodes.INVOKEVIRTUAL:
                     case Opcodes.INVOKESPECIAL:
                     case Opcodes.INVOKEINTERFACE:
-                        argCount = 1;
-                    case Opcodes.INVOKESTATIC: {
-                        MethodSignature msig = new MethodSignature(((MethodInsnNode)insn).desc);
+                        ++argCount;
+                    case Opcodes.INVOKESTATIC:
+                        if (msig == null)
+                            msig = new MethodSignature(((MethodInsnNode)insn).desc);
                         argCount += msig.getArgCount();
                         for (int i = 0; i < argCount; ++i) {
                             // Longs and doubles pop 2 values from the stack
@@ -328,17 +368,12 @@ public class FrameState {
                             stack.add(msig.getRet());
 
                         break;
-                    }
-
-                    case Opcodes.INVOKEDYNAMIC:
-                        // TODO: Implement: this requires dynamic call-site resolution and injection
-                        //InvokeDynamicInsnNode dyn = (InvokeDynamicInsnNode) insn;
-                        break;
 
                     case 196: // WIDE
                         // WIDE instruction not expected in normal Java programs
                         // TODO: Implement?
-                        throw new NotImplementedException();
+                        //throw new NotImplementedException();
+                        break; // Ignore instruction, since it wraps the immediately following instruction
                 }
 
             } else if (pushType == 'X') {
@@ -380,9 +415,18 @@ public class FrameState {
                             // type, so we just get the internal name of that field reflectively because I'm lazy
                             // TODO: Un-reflect-ify this because it can literally be solved with if-elses instead
                             try {
-                                stack.add(new TypeSignature(
-                                        ((Class<?>)ldc.cst.getClass().getField("TYPE").get(null)).getName()
-                                ));
+                                Class<?> cType = ((Class<?>)ldc.cst.getClass().getField("TYPE").get(null));
+                                char cLetter =
+                                        long.class.equals(cType) ? 'j' :
+                                                boolean.class.equals(cType) ? 'z' :
+                                                        cType.getName().charAt(0);
+
+                                stack.add(new TypeSignature(cLetter, false));
+
+                                // For W pushes, add top value
+                                if (long.class.equals(cType) || double.class.equals(cType))
+                                    stack.add(new TypeSignature(cLetter, true));
+
                             } catch (NoSuchFieldException | IllegalAccessException e) {
                                 throw new RuntimeException(e);
                             }
@@ -433,8 +477,8 @@ public class FrameState {
                 }
             } else {
                 // Trivial-ish argument and result
-                trivialPop(insn, popType, stack, locals, constants);
-                trivialPush(insn, pushType, stack, locals, constants);
+                trivialPop(insn, popType, stack, locals);
+                trivialPush(insn, pushType, stack, locals);
             }
         }
     }
@@ -446,9 +490,8 @@ public class FrameState {
      * @param type Classification of push type
      * @param stack Simulated operand stand types
      * @param locals Simulated frame local types
-     * @param constants Method constant pool
      */
-    private static void trivialPop(AbstractInsnNode insn, char type, List<TypeSignature> stack, List<TypeSignature> locals, List<TypeSignature> constants) {
+    private static void trivialPop(AbstractInsnNode insn, char type, List<TypeSignature> stack, List<LocalVariableNode> locals) {
         // TODO: Fix type naming scheme; this is actually going to make me cry
         // Yes, the fall-throughs are very intentional
         switch (type) {
@@ -493,9 +536,8 @@ public class FrameState {
      * @param type Classification of push type
      * @param stack Simulated operand stand types
      * @param locals Simulated frame local types
-     * @param constants Method constant pool
      */
-    private static void trivialPush(AbstractInsnNode insn, char type, List<TypeSignature> stack, List<TypeSignature> locals, List<TypeSignature> constants) {
+    private static void trivialPush(AbstractInsnNode insn, char type, List<TypeSignature> stack, List<LocalVariableNode> locals) {
         // Pushing is a bit more tricky than popping because we have to resolve types (kind of)
         switch (type) {
             case 'I':
@@ -525,7 +567,18 @@ public class FrameState {
                     case 44:  // ALOAD_2
                     case 45:  // ALOAD_3
                         // Push a local variable to the stack
-                        stack.add(locals.get(((VarInsnNode) insn).var));
+                        Optional<LocalVariableNode> targetVar = localsAt(insn, locals)
+                                .stream()
+                                .filter(it -> it.index == ((VarInsnNode) insn).var)
+                                .findFirst();
+
+                        if (!targetVar.isPresent())
+                            throw new StateAnalysisException(String.format(
+                                    "Attempt to access a local variable out of scope: Opcode = %s",
+                                    insn.getOpcode()
+                            ));
+
+                        stack.add(new TypeSignature(targetVar.get().desc));
                         break;
 
                     case Opcodes.AALOAD:
@@ -540,7 +593,7 @@ public class FrameState {
                     case Opcodes.NEW:
                         // Allocate a new object (should really be marked as uninitialized, but meh)
                         // We'll burn that bridge when we get to it or something...
-                        stack.add(new TypeSignature(((TypeInsnNode) insn).desc));
+                        stack.add(new TypeSignature(String.format("L%s;", ((TypeInsnNode) insn).desc)));
                         break;
 
                     case Opcodes.NEWARRAY:
@@ -587,7 +640,11 @@ public class FrameState {
      * "Opcode<...>", please refer to the comments in {@link Opcodes} as well as the official JVM specification
      * @see <a href="https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5">JVM8 instructions spec</a>
      */
-    private static List<String> getOpsByComplexity(boolean complexPush, boolean complexPop, @Nullable Predicate<Integer> insnP) {
+    private static List<String> getOpsByComplexity(
+            boolean complexPush,
+            boolean complexPop,
+            @Nullable Predicate<Integer> insnP
+    ) {
         ArrayList<Integer> opcodes = new ArrayList<>();
 
         for (int i = 0; i < FrameState.STACK_CLOBBER_PUSH.length(); ++i)
@@ -620,5 +677,41 @@ public class FrameState {
                 throw new RuntimeException(t);
             }
         }).collect(java.util.stream.Collectors.toList());
+    }
+
+
+    /**
+     * Find the index of a given instruction relative to a starting point
+     * @param current Starting point for search
+     * @param find Instruction to find
+     * @return Negative values for instructions previous to the current instruction, positive values for instructions
+     * after the current instruction. Null if instruction could not be found
+     */
+    private static @Nullable Integer relativeIndexOf(
+            @NotNull AbstractInsnNode current,
+            @NotNull AbstractInsnNode find
+    ) {
+        // Check backward
+        int idx = 0;
+        AbstractInsnNode check = current;
+        while (check != null) {
+            if (check == find)
+                return idx;
+            --idx;
+            check = check.getPrevious();
+        }
+
+        // Check forward
+        idx = 1;
+        check = current.getNext();
+        while (check != null) {
+            if (check == find)
+                return idx;
+            ++idx;
+            check = check.getNext();
+        }
+
+        // No match
+        return null;
     }
 }

@@ -195,7 +195,10 @@ public class Combine {
     }
 
     protected void adaptFrameNode(FrameNode node, MethodNode method, GraftSource source) {
+        for (int i = 0; i < node.stack.size(); ++i)
+            if (node.stack.get(i) instanceof Type) {
 
+            }
     }
 
     /**
