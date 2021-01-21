@@ -174,6 +174,17 @@ public class TypeSignature {
     }
 
     /**
+     * Get the type signature of the innermost element type. For example, "[[[I" would produce "I"
+     * @return Innermost element type for array types, this for non-array types
+     */
+    public TypeSignature getArrayAtomType() {
+        if (!isArray())
+            return this;
+
+        return new TypeSignature(sig.substring(arrayDepth));
+    }
+
+    /**
      * Check whether or not this type represents a Top type.
      * @return True if it is a Top, else false
      */

@@ -6,7 +6,7 @@ import java.util.Objects;
 
 public class MethodSignature {
     private final TypeSignature[] args;
-    private final TypeSignature ret;
+    private TypeSignature ret;
 
     public MethodSignature(String sig) {
         // Minimal signature size is 3. For example: "()V". With name, minimal length is 4: "a()V"
@@ -92,6 +92,14 @@ public class MethodSignature {
 
     public TypeSignature getArg(int index) {
         return args[index];
+    }
+
+    public void setArg(int idx, TypeSignature sig) {
+        args[idx] = sig;
+    }
+
+    public void setRet(TypeSignature sig) {
+        ret = sig;
     }
 
     public TypeSignature getRet() {

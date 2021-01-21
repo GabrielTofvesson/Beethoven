@@ -18,8 +18,10 @@ public final class GraftSource {
     private final String typeName;
     private final HashMap<MethodNode, List<AsmAnnotation<?>>> methodAnnotations;
     private final HashMap<FieldNode, List<AsmAnnotation<?>>> fieldAnnotations;
+    private final ClassNode source;
 
     public GraftSource(ClassNode source) {
+        this.source = source;
         this.typeName = source.name;
 
         methodAnnotations = new HashMap<>();
@@ -41,6 +43,14 @@ public final class GraftSource {
 
             fieldAnnotations.put(fNode, annotations);
         }
+    }
+
+    public MethodNode getMethodNode(String name, String desc) {
+        for (MethodNode node : source.methods)
+            if (node.name.equals(name) && node.desc.equals(desc))
+                return node;
+
+        return null;
     }
 
     public String getTypeName() {
