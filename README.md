@@ -5,24 +5,20 @@ What this means is that a user of this library should never have to see
 so much as a byte. Everything should be abstracted to the level of classes,
 methods and fields.
 
-## Progress:
+## Version 2
 
-* Method injection (replacement, in-place leading injection and in-place trailing injection)
+### Implemented
 
-* Field injection (access transforming and new fields)
+* Per-instruction method frame state analysis tools
 
-* Target field accesses from injection class (non-primitive/reference)
+* Method insertion (basic)
 
-* Method calls and field accesses referencing injection class elements automatically redirected to target
+* Method replacement (basic)
 
-* Optional interface injection
+### TODO
+  
+* In-place method prepending
 
-* Target class method invocation
+* In-place method appending
 
-* Multiple injections per method
-
-* In-place method instruction injection with references to previous method's return value
-
-## TODO:
-
-* Better tests
+* Automatic injection of INVOKEDYNAMIC lambda targets
