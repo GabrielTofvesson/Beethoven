@@ -6,6 +6,8 @@ import dev.w1zzrd.asm.signature.TypeSignature;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Stack;
 
@@ -19,16 +21,25 @@ public class Test {
 
         Stack<TypeSignature> stack = FrameState.getFrameStateAt(stackTest.instructions.getLast().getPrevious().getPrevious().getPrevious().getPrevious().getPrevious(), stackTest.localVariables);
 
-        GraftSource source = new GraftSource(target);
+        GraftSource source = new GraftSource(inject);
 
         Combine combine = new Combine(target);
         for (MethodNode method : source.getInjectMethods()) {
             combine.inject(method, source);
         }
 
+        File f = new File("MergeTest.class");
+        if(f.isFile() && f.delete() && f.createNewFile()) {
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(combine.toByteArray());
+            fos.close();
+        }
+
         combine.compile();
 
-        System.out.println("Asdf");
+        new MergeTest().test();
+
+        System.out.println(new MergeTest().stackTest());
 
         /*
         Merger m = new Merger("MergeTest");

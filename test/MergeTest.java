@@ -16,6 +16,7 @@ public class MergeTest {
     public String test(){
         Class<?> c = Merger.class;
         Runnable r = () -> {
+            System.out.println("Sick");
             System.out.println(c.getName());
         };
 
@@ -28,11 +29,11 @@ public class MergeTest {
         return s;
     }
 
-    public void stackTest() {
+    public int stackTest() {
         String str = Integer.toString(getNumber() * 23);
 
         if ("69".equals(str)) {
-            int k = Integer.getInteger(str);
+            int k = Integer.parseInt(str);
 
             System.out.println(k + str + (k * k));
             getNumber();
@@ -43,6 +44,8 @@ public class MergeTest {
         System.out.println(f + str + (f * f));
 
         multiArg(str, f, f == 5f, "69".equals(str) ? f * f : (f + 1.0), f < 6f ? (int)f : 7);
+
+        return getNumber() * 5;
     }
 
 

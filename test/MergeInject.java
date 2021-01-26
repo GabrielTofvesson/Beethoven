@@ -12,20 +12,33 @@ public class MergeInject extends MergeTest implements Runnable {
     // Dummy field
     String s;
 
+    /*
     @Inject
     MergeInject() {
         s = "Hello";
         number = 10;
     }
 
+     */
 
 
 
 
+
+    @Inject(value = AFTER, target = "stackTest()I", acceptOriginalReturn = true)
+    public int stackTest(int arg) {
+        Runnable r = () -> {
+          System.out.println(arg / 15);
+          System.out.println("Heyo");
+        };
+        r.run();
+        return 69;
+    }
 
 
     @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
     public String test(String retVal){
+
         System.out.println("Got retval: "+retVal);
 
         if (retVal.endsWith("e!!Test")) {
@@ -45,21 +58,28 @@ public class MergeInject extends MergeTest implements Runnable {
 
         System.out.println(s);
 
+
+
         if(s.endsWith("e!!")) {
             System.out.println("Special!");
             return "ASDF";
         }
 
-        System.out.println(number);
+
+
+        System.out.println(s);
+
 
         return "Modified";
     }
 
+    /*
     @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
     public String test_inject$1(String retVal) {
         System.out.println("Another injection: "+retVal);
         return retVal;
     }
+     */
 
 
 
