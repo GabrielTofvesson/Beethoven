@@ -11,11 +11,13 @@ methods and fields.
 
 * Per-instruction method frame state analysis tools
 
-* Method insertion (basic)
+* Method insertion
 
-* Method replacement (basic)
+* Method replacement
   
 * In-place method appending
+  * Accepting return value as argument
+  * Overwriting return value
   
 * Automatic injection of INVOKEDYNAMIC lambda targets
 
