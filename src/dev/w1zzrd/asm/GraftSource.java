@@ -8,10 +8,7 @@ import jdk.internal.org.objectweb.asm.tree.FieldNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public final class GraftSource {
@@ -91,9 +88,19 @@ public final class GraftSource {
 
     public @Nullable MethodNode getInjectedMethod(String name, String desc) {
         return methodAnnotations
-                .keySet()
+                .entrySet()
                 .stream()
-                .filter(it -> it.name.equals(name) && it.desc.equals(desc))
+                .filter(kv ->
+                        {
+                            if (!kv.getKey().name.equals(name)) return false;
+                            assert getInjectionDirective(kv.getValue()) != null;
+                            return new MethodSignature(getInjectionDirective(kv.getValue())
+                                    .getEntryOr("target", kv.getKey().desc))
+                                    .toString()
+                                    .equals(desc);
+                        }
+                )
+                .map(Map.Entry::getKey)
                 .findFirst()
                 .orElse(null);
     }

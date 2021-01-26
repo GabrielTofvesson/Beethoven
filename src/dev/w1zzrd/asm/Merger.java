@@ -958,7 +958,7 @@ public class Merger {
      */
     public static ClassNode readClass(byte[] data) {
         ClassNode node = new ClassNode();
-        new ClassReader(data).accept(node, ClassReader.EXPAND_FRAMES);
+        new ClassReader(data).accept(node, 0);
         return node;
     }
 

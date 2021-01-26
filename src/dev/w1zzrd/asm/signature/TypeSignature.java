@@ -209,6 +209,24 @@ public class TypeSignature {
         return sig.length() == 1;
     }
 
+
+
+     /**
+     * Whether or not the type signature represents an uninitialized type
+     * @return True if this is marked as uninitialized, else false
+     */
+    public boolean isUninitialized() {
+        return modifier == TypeModifier.UNINITIALIZED;
+    }
+
+    /**
+     * Whether or not this type is null
+     * @return True if it is null, else false
+     */
+    public boolean isNull() {
+        return modifier == TypeModifier.NULL;
+    }
+
     /**
      * The array depth of the currently represented object. Primitives and objects have a depth of 0.
      * Array types have a depth grater than 0 dependent on the depth of the nesting.

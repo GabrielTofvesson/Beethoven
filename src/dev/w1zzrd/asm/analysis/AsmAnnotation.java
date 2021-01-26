@@ -37,6 +37,13 @@ public final class AsmAnnotation<A extends Annotation> {
         return (T)getValueMethod(name).getDefaultValue();
     }
 
+    public <T> T getEntryOr(String name, T defVal) {
+        if (!hasExplicitEntry(name))
+            return defVal;
+
+        return getEntry(name);
+    }
+
     public <T extends Enum<T>> T getEnumEntry(String entryName) {
         if (!hasExplicitEntry(entryName)) {
             if (hasDefaultEntry(entryName))

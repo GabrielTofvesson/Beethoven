@@ -71,58 +71,52 @@ public class Combine {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = checkMethodExists(source.getMethodTargetName(extension), source.getMethodTargetSignature(extension));
+        final MethodNode target = checkMethodExists(
+                source.getMethodTargetName(extension),
+                source.getMethodTargetSignature(extension)
+        );
         adaptMethod(extension, source);
 
-        MethodSignature msig = new MethodSignature(target.desc);
-        MethodSignature xsig = new MethodSignature(extension.desc);
+        // Get the method signatures so we know what we're working with local-variable-wise ;)
+        final MethodSignature msig = new MethodSignature(target.desc);
+        final MethodSignature xsig = new MethodSignature(extension.desc);
 
+        // Get total argument count, including implicit "this" argument
+        final int graftArgCount = xsig.getArgCount() + (isStatic(extension) ? 0 : 1);
+        final int targetArgCount = msig.getArgCount() + (isStatic(target) ? 0 : 1);
 
         List<AbstractInsnNode> targetInsns;
 
-        // If graft method cares about the return value of the original method
-        if (acceptReturn) {
-            LocalVariableNode retVar = null;
+        // If graft method cares about the return value of the original method, i.e. accepts it as an extra "argument"
+        if (acceptReturn && !msig.getRet().isVoidType()) {
+            //noinspection OptionalGetWithoutIsPresent
+            LocalVariableNode retVar = extension.localVariables
+                    .stream()
+                    .filter(it -> it.index == graftArgCount - 1)
+                    .findFirst()
+                    .get();
 
-            // If return of original is not void, we need to capture and store it to pass to the extension code
-            if (!msig.getRet().isVoidType()) {
-                // Generate a random return var name
-                String name;
-                GEN_NAME:
-                do {
-                    name = getRandomString(1, 16);
-                    for (LocalVariableNode vNode : target.localVariables)
-                        if (name.equals(vNode.name))
-                            continue GEN_NAME;
+            // Inject return variable
+            adjustArgument(target, retVar, true, true);
 
-                    break;
-                } while (true);
-
-                // Create return variable
-                retVar = insertRetvarNode(target, name, msig.getRet());
-            }
+            // Handle retvar specially
+            extension.localVariables.remove(retVar);
 
             // Convert instructions into a more modifiable format
             targetInsns = decomposeToList(target.instructions);
 
+            // Make space in the original frames for the return var
+            // This isn't an optimal solution, but it works for now
+            adjustFramesForRetVar(targetInsns, targetArgCount);
+
             // Replace return instructions with GOTOs to the last instruction in the list
             // Return values are stored in retVar
-            storeAndGotoFromReturn(targetInsns, retVar == null ? -1 : retVar.index);
-
-            // We need to extend the scope of the retVar into the grafted code
-            if (retVar != null)
-                //noinspection OptionalGetWithoutIsPresent
-                retVar.end = extension.localVariables
-                        .stream()
-                        .filter(it -> it.index == xsig.getArgCount() - 1)
-                        .findFirst()
-                        .get() // This should never fail
-                        .end;
+            storeAndGotoFromReturn(target, targetInsns, retVar.index, xsig);
         } else {
             targetInsns = decomposeToList(target.instructions);
 
             // If we don't care about the return value from the original, we can replace returns with pops
-            popAndGotoFromReturn(targetInsns);
+            popAndGotoFromReturn(targetInsns, xsig);
         }
 
         List<LocalVariableNode> extVars = getVarsOver(extension.localVariables, xsig.getArgCount());
@@ -133,17 +127,46 @@ public class Combine {
         // Add extension instructions to instruction list
         targetInsns.addAll(decomposeToList(extension.instructions));
 
+        // Some weird TOP delimiter between "true" locals and args
+        //insertTopDelimiter(targetArgCount, targetInsns, target.localVariables, true);
+
         // Convert instructions back to a InsnList
         target.instructions = coalesceInstructions(targetInsns);
+
+        // Make sure we extend the scope of the original method arguments
+        for (int i = 0; i < targetArgCount; ++i)
+            adjustArgument(target, getVarAt(target.localVariables, i), false, false);
+
+        // Recompute maximum variable count
+        target.maxLocals = Math.max(
+                Math.max(
+                        targetArgCount + 1,
+                        graftArgCount + 1
+                ),
+                target.localVariables
+                        .stream()
+                        .map(it -> it.index)
+                        .max(Comparator.comparingInt(a -> a)).orElse(0) + 1
+        );
+
+        // Recompute maximum stack size
+        target.maxStack = Math.max(target.maxStack, extension.maxStack);
+
+        finishGrafting(extension, source);
     }
 
     public void prepend(MethodNode extension, GraftSource source) {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = checkMethodExists(source.getMethodTargetName(extension), source.getMethodTargetSignature(extension));
+        final MethodNode target = checkMethodExists(
+                source.getMethodTargetName(extension),
+                source.getMethodTargetSignature(extension)
+        );
         adaptMethod(extension, source);
 
+
+        finishGrafting(extension, source);
     }
 
     public void replace(MethodNode inject, GraftSource source, boolean preserveOriginalAccess) {
@@ -156,6 +179,8 @@ public class Combine {
             copySignatures(remove, inject, Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED | Opcodes.ACC_PRIVATE);
 
         insertOrReplace(inject, source);
+
+        finishGrafting(inject, source);
     }
 
     public void insert(MethodNode inject, GraftSource source) {
@@ -164,12 +189,11 @@ public class Combine {
 
         checkMethodNotExists(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject));
         insertOrReplace(inject, source);
+
+        finishGrafting(inject, source);
     }
 
     protected void insertOrReplace(MethodNode inject, GraftSource source) {
-        if (initiateGrafting(inject, source))
-            return;
-
         MethodNode replace = findMethodNode(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject));
 
         if (replace != null)
@@ -189,6 +213,11 @@ public class Combine {
             graftSources.add(unit);
 
         return alreadyGrafting;
+    }
+
+    private void finishGrafting(MethodNode node, GraftSource source) {
+        if (!graftSources.remove(new DynamicSourceUnit(source, node)))
+            throw new IllegalStateException("Attempt to finish grafting when grafting is not it progress!");
     }
 
 
@@ -255,40 +284,19 @@ public class Combine {
      */
     protected void adaptMethod(MethodNode node, GraftSource source) {
         // Adapt instructions
-        ADAPT:
         for (AbstractInsnNode insn = node.instructions.getFirst(); insn != null; insn = insn.getNext()) {
             if (insn instanceof MethodInsnNode) adaptMethodInsn((MethodInsnNode) insn, source);
             else if (insn instanceof LdcInsnNode) adaptLdcInsn((LdcInsnNode) insn, source.getTypeName());
-            else if (insn instanceof FrameNode) adaptFrameNode((FrameNode) insn, node, source);
-            else if (insn instanceof InvokeDynamicInsnNode && ((Handle)((InvokeDynamicInsnNode) insn).bsmArgs[1]).getOwner().equals(source.getTypeName())) {
-                // We have an INVOKEDYNAMIC to a method in the graft source class. The target has to be injected into the target
-                Handle handle = (Handle)((InvokeDynamicInsnNode) insn).bsmArgs[1];
-
-                for (MethodNode mNode : target.methods)
-                    if (mNode.name.equals(handle.getName()) && mNode.desc.equals(handle.getDesc()))
-                        continue ADAPT; // The target has already been injected
-
-                MethodNode inject = source.getMethodNode(handle.getName(), handle.getDesc());
-                if (inject == null)
-                    throw new MethodNodeResolutionException(String.format(
-                            "Could not locate lambda target %s%s in graft source %s",
-                            handle.getName(),
-                            handle.getDesc(),
-                            source.getTypeName()
-                    ));
-
-                // Attempt to inject lambda target site into target class
-                insert(inject, source);
-
-                // The INVOKEDYNAMIC now points to a call site in the target class
-                ((InvokeDynamicInsnNode) insn).bsmArgs[1] = new Handle(
-                        handle.getTag(),
-                        target.name,
-                        handle.getName(),
-                        handle.getDesc()
-                );
-            }
+            else if (insn instanceof FrameNode) adaptFrameNode((FrameNode) insn, source);
+            else if (insn instanceof FieldInsnNode) adaptFieldInsn((FieldInsnNode) insn, source);
+            else if (insn instanceof InvokeDynamicInsnNode) adaptInvokeDynamicInsn((InvokeDynamicInsnNode) insn, source);
         }
+
+        // Adapt variable types
+        final String graftTypeName = "L"+source.getTypeName()+";";
+        for (LocalVariableNode varNode : node.localVariables)
+            if (graftTypeName.equals(varNode.desc))
+                varNode.desc = graftTypeName;
 
         node.name = source.getMethodTargetName(node);
     }
@@ -305,8 +313,16 @@ public class Combine {
         return label;
     }
 
-    private static void storeAndGotoFromReturn(List<AbstractInsnNode> nodes, int storeIndex) {
+    private void storeAndGotoFromReturn(MethodNode source, List<AbstractInsnNode> nodes, int storeIndex, MethodSignature sig) {
         LabelNode endLabel = findOrMakeEndLabel(nodes);
+
+
+        int frameInsert = nodes.indexOf(endLabel);
+        List<Object> local = makeFrameLocals(sig.getArgs());
+        if (!isStatic(source))
+            local.add(0, target.name);
+        //nodes.add(frameInsert + 1, new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+        nodes.add(frameInsert + 1, new FrameNode(Opcodes.F_FULL, local.size(), local.toArray(), 0, new Object[0]));
 
         INSTRUCTION_LOOP:
         for (int i = 0; i < nodes.size(); ++i) {
@@ -339,12 +355,17 @@ public class Combine {
                     continue INSTRUCTION_LOOP;
             }
 
-            nodes.set(i, new JumpInsnNode(Opcodes.GOTO, endLabel));
+            nodes.set(i + 1, new JumpInsnNode(Opcodes.GOTO, endLabel));
         }
     }
 
-    private static void popAndGotoFromReturn(List<AbstractInsnNode> nodes) {
+    private static void popAndGotoFromReturn(List<AbstractInsnNode> nodes, MethodSignature sig) {
         LabelNode endLabel = findOrMakeEndLabel(nodes);
+
+        int frameInsert = nodes.indexOf(endLabel);
+        List<Object> local = makeFrameLocals(sig.getArgs());
+        //nodes.add(frameInsert + 1, new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+        nodes.add(frameInsert + 1, new FrameNode(Opcodes.F_SAME, local.size(), local.toArray(), 0, new Object[0]));
 
         INSTRUCTION_LOOP:
         for (int i = 0; i < nodes.size(); ++i) {
@@ -368,7 +389,7 @@ public class Combine {
                     continue INSTRUCTION_LOOP;
             }
 
-            nodes.set(i, new JumpInsnNode(Opcodes.GOTO, endLabel));
+            nodes.set(i + 1, new JumpInsnNode(Opcodes.GOTO, endLabel));
         }
     }
 
@@ -395,48 +416,64 @@ public class Combine {
     }
 
 
-    private static LocalVariableNode insertRetvarNode(MethodNode node, String name, TypeSignature type) {
-        // Finds first label or creates it
-        LabelNode firstLabel = findLabelBeforeReturn(node.instructions.getFirst(), AbstractInsnNode::getNext);
+    private static void adjustArgument(MethodNode node, LocalVariableNode varNode, boolean backward, boolean insert) {
+        if (backward) {
+            // Finds first label or creates it
+            LabelNode firstLabel = findLabelBeforeReturn(node.instructions.getFirst(), AbstractInsnNode::getNext);
 
-        // No label found before a return: create one
-        if (firstLabel == null)
-            node.instructions.insert(firstLabel = new LabelNode());
+            // No label found before a return: create one
+            if (firstLabel == null)
+                node.instructions.insert(firstLabel = new LabelNode());
 
-        // Finds last label or creates it
-        LabelNode lastLabel = findLabelBeforeReturn(node.instructions.getLast(), AbstractInsnNode::getPrevious);
+            varNode.start = firstLabel;
+        } else {
+            // Finds last label or creates it
+            LabelNode lastLabel = findLabelBeforeReturn(node.instructions.getLast(), AbstractInsnNode::getPrevious);
 
-        // No label found after a return: create one
-        if (lastLabel == null)
-            node.instructions.add(lastLabel = new LabelNode());
+            // No label found after a return: create one
+            if (lastLabel == null)
+                node.instructions.add(lastLabel = new LabelNode());
 
-
-        // Put new variable immediately after the method arguments
-        MethodSignature msig = new MethodSignature(node.desc);
-        LocalVariableNode varNode = new LocalVariableNode(
-                name,
-                type.getSig(),
-                null,
-                firstLabel,
-                lastLabel,
-                msig.getArgCount()
-        );
-
-        // Increment existing variable indices by 1
-        for (LocalVariableNode vNode : node.localVariables)
-            if (vNode.index >= varNode.index)
-                ++vNode.index;
-
-        // Update instructions referencing local variables
-        for (AbstractInsnNode insn = node.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (insn instanceof VarInsnNode && ((VarInsnNode) insn).var >= varNode.index)
-                ++((VarInsnNode) insn).var;
+            varNode.end = lastLabel;
         }
 
-        // Add variable to locals
-        node.localVariables.add(varNode);
+        if (insert) {
+            // Increment existing variable indices by 1
+            for (LocalVariableNode vNode : node.localVariables)
+                if (vNode.index >= varNode.index)
+                    ++vNode.index;
 
-        return varNode;
+            // Update instructions referencing local variables
+            for (AbstractInsnNode insn = node.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+                if (insn instanceof VarInsnNode && ((VarInsnNode) insn).var >= varNode.index)
+                    ++((VarInsnNode) insn).var;
+            }
+
+            // Add variable to locals
+            node.localVariables.add(varNode);
+        }
+    }
+
+    protected static void adjustFramesForRetVar(List<AbstractInsnNode> nodes, int argc) {
+        boolean isFirst = true;
+        for (AbstractInsnNode node : nodes)
+            if (node instanceof FrameNode) {
+                if (isFirst) {
+                    isFirst = false;
+
+                    if (((FrameNode) node).type == Opcodes.F_APPEND) {
+                        List<Object> append = new ArrayList<>(((FrameNode) node).local);
+                        append.add(0, Opcodes.TOP);
+                        ((FrameNode) node).local = append;
+                    }
+                }
+
+                if (((FrameNode) node).type == Opcodes.F_FULL) {
+                    List<Object> append = new ArrayList<>(((FrameNode) node).local);
+                    append.add(argc, Opcodes.TOP);
+                    ((FrameNode) node).local = append;
+                }
+            }
     }
 
 
@@ -451,6 +488,7 @@ public class Combine {
             if (injected != null) {
                 node.owner = this.target.name;
                 node.name = source.getMethodTargetName(injected);
+                node.desc = adaptMethodSignature(node.desc, source);
             }
         }
     }
@@ -465,7 +503,7 @@ public class Combine {
             node.cst = Type.getType(String.format("L%s;", originalOwner));
     }
 
-    protected void adaptFrameNode(FrameNode node, MethodNode method, GraftSource source) {
+    protected void adaptFrameNode(FrameNode node, GraftSource source) {
         adaptFrameTypes(node.stack, source);
         adaptFrameTypes(node.local, source);
     }
@@ -475,33 +513,126 @@ public class Combine {
         if (types == null)
             return;
 
+        final String sourceTypeName = "L"+source.getTypeName()+";";
+        final String targetTypeName = "L"+target.name+";";
+
         for (int i = 0; i < types.size(); ++i) {
             if (types.get(i) instanceof Type) {
                 Type t = (Type) types.get(i);
 
-                if (t.getSort() == Type.OBJECT && source.getTypeName().equals(t.getInternalName()))
-                    types.set(i, Type.getType(source.getTypeName()));
-                else if (t.getSort() == Type.METHOD) {
-                    TypeSignature sourceSig = new TypeSignature("L"+source.getTypeName()+";");
-                    TypeSignature targetSig = new TypeSignature("L"+target.name+";");
-                    MethodSignature mDesc = new MethodSignature(t.getDescriptor());
-                    for (int j = 0; j < mDesc.getArgCount(); ++j)
-                        if (mDesc.getArg(j).getArrayAtomType().equals(sourceSig))
-                            mDesc.setArg(j, new TypeSignature(
-                                    targetSig.getSig(),
-                                    mDesc.getArg(j).getArrayDepth(),
-                                    false
-                            ));
-
-                    if (mDesc.getRet().getArrayAtomType().equals(sourceSig))
-                        mDesc.setRet(new TypeSignature(
-                                targetSig.getSig(),
-                                mDesc.getRet().getArrayDepth(),
-                                false
-                        ));
-                }
-            }
+                if (t.getSort() == Type.OBJECT && sourceTypeName.equals(t.getInternalName()))
+                    types.set(i, Type.getType(targetTypeName));
+                else if (t.getSort() == Type.METHOD)
+                    types.set(i, Type.getMethodType(adaptMethodSignature(t.getDescriptor(), source)));
+            } else if (types.get(i) instanceof String && source.getTypeName().equals(types.get(i)))
+                types.set(i, target.name);
         }
+    }
+
+    protected static List<Object> makeFrameLocals(TypeSignature... sigs) {
+        ArrayList<Object> local = new ArrayList<>();
+
+        for (TypeSignature sig : sigs)
+            if (sig.isPrimitive())
+                switch (sig.getSig().charAt(0)) {
+                    case 'B':
+                    case 'Z':
+                    case 'C':
+                    case 'I':
+                        local.add(Opcodes.INTEGER);
+                        break;
+
+                    case 'F':
+                        local.add(Opcodes.FLOAT);
+                        break;
+
+                    case 'J':
+                        if (sig.isTop())
+                            local.add(Opcodes.TOP);
+                        else
+                            local.add(Opcodes.LONG);
+                        break;
+
+                    case 'D':
+                        if (sig.isTop())
+                            local.add(Opcodes.TOP);
+                        else
+                            local.add(Opcodes.DOUBLE);
+                        break;
+                }
+            else if (sig.isNull()) local.add(Opcodes.NULL);
+            else if (sig.isUninitialized()) local.add(Opcodes.UNINITIALIZED_THIS);
+            else if (sig.isArray()) local.add(sig.getSig());
+            else local.add(sig.getSig().substring(1, sig.getSig().length() - 1));
+
+        return local;
+    }
+
+    protected void adaptFieldInsn(FieldInsnNode node, GraftSource source) {
+        if (node.owner.equals(source.getTypeName()))
+            node.owner = target.name;
+    }
+
+    protected void adaptInvokeDynamicInsn(InvokeDynamicInsnNode insn, GraftSource source) {
+        if (insn.bsmArgs[1] instanceof Handle && ((Handle) insn.bsmArgs[1]).getOwner().equals(source.getTypeName())) {
+            // We have an INVOKEDYNAMIC to a method in the graft source class
+            // The target has to be injected into the target
+            Handle handle = (Handle) insn.bsmArgs[1];
+
+            for (MethodNode mNode : target.methods)
+                if (mNode.name.equals(handle.getName()) && mNode.desc.equals(handle.getDesc()))
+                    return; // The target has already been injected
+
+            MethodNode inject = source.getMethodNode(handle.getName(), handle.getDesc());
+            if (inject == null)
+                throw new MethodNodeResolutionException(String.format(
+                        "Could not locate lambda target %s%s in graft source %s",
+                        handle.getName(),
+                        handle.getDesc(),
+                        source.getTypeName()
+                ));
+
+            // Attempt to inject lambda target site into target class
+            insert(inject, source);
+
+            // The INVOKEDYNAMIC now points to a call site in the target class
+            insn.bsmArgs[1] = new Handle(
+                    handle.getTag(),
+                    target.name,
+                    handle.getName(),
+                    adaptMethodSignature(handle.getDesc(), source)
+            );
+        }
+    }
+
+    /**
+     * Replaces any references to the graft source type with the target type
+     * @param desc Method descriptor to adapt
+     * @param source {@link GraftSource} to replace references to
+     * @return Method signature with references to target type in place of graft source type
+     */
+    protected String adaptMethodSignature(String desc, GraftSource source) {
+        TypeSignature graftSig = new TypeSignature("L"+source.getTypeName()+";");
+        MethodSignature sig = new MethodSignature(desc);
+        for (int i = 0; i < sig.getArgCount(); ++i)
+            if (sig.getArg(i).getArrayAtomType().equals(graftSig))
+                sig.setArg(
+                        i,
+                        new TypeSignature(
+                                "L"+target.name+";",
+                                sig.getArg(i).getArrayDepth(),
+                                false
+                        )
+                );
+
+        if (sig.getRet().getArrayAtomType().equals(graftSig))
+            sig.setRet(new TypeSignature(
+                    "L"+target.name+";",
+                    sig.getRet().getArrayDepth(),
+                    false
+            ));
+
+        return sig.toString();
     }
 
     /**
@@ -583,23 +714,9 @@ public class Combine {
 
 
 
+    @SuppressWarnings("unused") // Used for debugging
     public static java.util.List<? extends AbstractInsnNode> dumpInsns(MethodNode node) {
         return Arrays.asList(node.instructions.toArray());
-    }
-
-
-    private static String getRandomString(int minLen, int maxLen) {
-        Random r = ThreadLocalRandom.current();
-
-        // Select a random length
-        char[] str = new char[r.nextInt(maxLen - minLen) + minLen];
-
-        // Generate random string
-        str[0] = VAR_NAME_CHARS.charAt(r.nextInt(VAR_NAME_CHARS.length()));
-        for(int i = 1; i < str.length; ++i)
-            str[i] = VAR_NAME_CHARS1.charAt(r.nextInt(VAR_NAME_CHARS1.length()));
-
-        return new String(str);
     }
 
     protected static InsnList coalesceInstructions(List<AbstractInsnNode> nodes) {
@@ -615,6 +732,10 @@ public class Combine {
         return varNodes.stream().filter(it -> it.index >= minIndex).collect(Collectors.toList());
     }
 
+    protected static LocalVariableNode getVarAt(List<LocalVariableNode> varNodes, int index) {
+        return varNodes.stream().filter(it -> it.index == index).findFirst().orElse(null);
+    }
+
 
     protected static @Nullable LabelNode findLabelBeforeReturn(AbstractInsnNode start, INodeTraversal traverse) {
         for (AbstractInsnNode cur = start; cur != null; cur = traverse.traverse(cur))
@@ -626,6 +747,9 @@ public class Combine {
         return null; // Nothing was found
     }
 
+    protected static boolean isStatic(MethodNode node) {
+        return (node.access & Opcodes.ACC_STATIC) != 0;
+    }
 
     protected interface INodeTraversal {
         AbstractInsnNode traverse(AbstractInsnNode cur);

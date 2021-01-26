@@ -90,6 +90,10 @@ public class MethodSignature {
         return args.length;
     }
 
+    public TypeSignature[] getArgs() {
+        return Arrays.copyOf(args, args.length);
+    }
+
     public TypeSignature getArg(int index) {
         return args[index];
     }
