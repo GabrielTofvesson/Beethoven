@@ -47,6 +47,11 @@ public class MethodSignature {
         this.ret = ret;
     }
 
+    private MethodSignature(TypeSignature ret, TypeSignature[] args) {
+        this.ret = ret;
+        this.args = args;
+    }
+
     private static TypeSignature parseOneSignature(String sig, int startAt) {
         final int len = sig.length();
         switch (sig.charAt(startAt)) {
@@ -100,6 +105,13 @@ public class MethodSignature {
 
     public void setArg(int idx, TypeSignature sig) {
         args[idx] = sig;
+    }
+
+    public MethodSignature withoutLastArg() {
+        if (args.length == 0)
+            throw new IndexOutOfBoundsException();
+
+        return new MethodSignature(ret, Arrays.copyOf(args, args.length - 1));
     }
 
     public void setRet(TypeSignature sig) {

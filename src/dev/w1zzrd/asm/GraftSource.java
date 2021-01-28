@@ -67,19 +67,20 @@ public final class GraftSource {
     public String getMethodTargetName(MethodNode node) {
         String target = getMethodTarget(node);
 
-        if (target.contains("("))
+        if (target.indexOf("(") > 0)
             return target.substring(0, target.indexOf('('));
 
-        return target;
+        return node.name;
     }
 
-    public MethodSignature getMethodTargetSignature(MethodNode node) {
+    public MethodSignature getMethodTargetSignature(MethodNode node, boolean acceptOriginalReturn) {
         String target = getMethodTarget(node);
 
         if (target.contains("("))
             return new MethodSignature(target.substring(target.indexOf('(')));
 
-        return new MethodSignature(node.desc);
+        MethodSignature sig = new MethodSignature(node.desc);
+        return acceptOriginalReturn ? sig.withoutLastArg() : sig;
     }
 
     public boolean isMethodInjected(String name, String desc) {

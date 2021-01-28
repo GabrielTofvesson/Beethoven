@@ -43,7 +43,12 @@ public class Combine {
                 replace(node, source, true);
                 break;
             case INJECT: // Insert method by either replacing an existing method or inserting a new method
+                if (initiateGrafting(node, source))
+                    return;
+
                 insertOrReplace(node, source);
+
+                finishGrafting(node, source);
                 break;
             case AFTER: // Inject a method's instructions after the original instructions in a given method
                 append(node, source, acceptReturn);
@@ -66,10 +71,7 @@ public class Combine {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = checkMethodExists(
-                source.getMethodTargetName(extension),
-                source.getMethodTargetSignature(extension)
-        );
+        final MethodNode target = resolveMethod(extension, source, true);
         adaptMethod(extension, source);
 
         // Get the method signatures so we know what we're working with local-variable-wise ;)
@@ -141,10 +143,7 @@ public class Combine {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = checkMethodExists(
-                source.getMethodTargetName(extension),
-                source.getMethodTargetSignature(extension)
-        );
+        final MethodNode target = resolveMethod(extension, source, false);
         adaptMethod(extension, source);
 
         MethodSignature sig = new MethodSignature(extension.desc);
@@ -165,7 +164,7 @@ public class Combine {
         if (initiateGrafting(inject, source))
             return;
 
-        final MethodNode remove = checkMethodExists(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject));
+        final MethodNode remove = checkMethodExists(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject, false));
         ensureMatchingSignatures(remove, inject, Opcodes.ACC_STATIC);
         if (preserveOriginalAccess)
             copySignatures(remove, inject, Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED | Opcodes.ACC_PRIVATE);
@@ -179,14 +178,14 @@ public class Combine {
         if (initiateGrafting(inject, source))
             return;
 
-        checkMethodNotExists(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject));
+        checkMethodNotExists(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject, false));
         insertOrReplace(inject, source);
 
         finishGrafting(inject, source);
     }
 
     protected void insertOrReplace(MethodNode inject, GraftSource source) {
-        MethodNode replace = findMethodNode(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject));
+        MethodNode replace = findMethodNode(source.getMethodTargetName(inject), source.getMethodTargetSignature(inject, false));
 
         if (replace != null)
             this.target.methods.remove(replace);
@@ -325,7 +324,7 @@ public class Combine {
     protected void adaptMethod(MethodNode node, GraftSource source) {
         // Adapt instructions
         for (AbstractInsnNode insn = node.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (insn instanceof MethodInsnNode) adaptMethodInsn((MethodInsnNode) insn, source, node);
+            if (insn instanceof MethodInsnNode) insn = adaptMethodInsn((MethodInsnNode) insn, source, node);
             else if (insn instanceof LdcInsnNode) adaptLdcInsn((LdcInsnNode) insn, source.getTypeName());
             else if (insn instanceof FrameNode) adaptFrameNode((FrameNode) insn, source);
             else if (insn instanceof FieldInsnNode) adaptFieldInsn((FieldInsnNode) insn, source);
@@ -506,14 +505,15 @@ public class Combine {
      * @param node Grafted method instruction node
      * @param source The {@link GraftSource} from which the instruction node will be adapted
      */
-    protected void adaptMethodInsn(MethodInsnNode node, GraftSource source, MethodNode sourceMethod) {
+    protected AbstractInsnNode adaptMethodInsn(MethodInsnNode node, GraftSource source, MethodNode sourceMethod) {
         if (node.owner.equals(source.getTypeName())) {
-            final MethodNode injected = source.getInjectedMethod(node.name, node.desc);
-            if (injected != null) {
+            //final MethodNode injected = source.getInjectedMethod(node.name, node.desc);
+            //if (injected != null) {
                 node.owner = this.target.name;
-                node.name = source.getMethodTargetName(injected);
-                node.desc = adaptMethodSignature(node.desc, source);
-            }
+                //node.name = source.getMethodTargetName(injected);
+                //node.desc = adaptMethodSignature(node.desc, source);
+            //}
+            return node;
         } else if (node.owner.equals("dev/w1zzrd/asm/Directives")) { // ASM target directives
             if (node.name.equals(Directives.directiveNameByTarget(DirectiveTarget.TargetType.CALL_SUPER))) {
                 // We're attempting to redirect a call to a superclass
@@ -537,7 +537,9 @@ public class Combine {
                         continue;
                     }
 
-                    return;
+                    sourceMethod.instructions.remove(node);
+
+                    return prev;
                 }
 
                 throw new RuntimeException(String.format("Could not locate a target for directive %s", node.name));
@@ -572,8 +574,12 @@ public class Combine {
                     // This should just remove the extraneous RETURN instruction
                     insnList.remove(afterJump);
                 }
+
+                return jumpInsn;
             }
         }
+
+        return node;
     }
 
     /**
@@ -838,6 +844,67 @@ public class Combine {
                 return null;
 
         return null; // Nothing was found
+    }
+
+    protected MethodNode resolveMethod(MethodNode inject, GraftSource source, boolean allowAcceptRet) {
+        AsmAnnotation<Inject> annot = AsmAnnotation.getAnnotation(Inject.class, inject.visibleAnnotations);
+        if (!allowAcceptRet && (Boolean)annot.getEntry("acceptOriginalReturn"))
+            throw new MethodNodeResolutionException(String.format(
+                    "Method %s marked as accepting original return, but injection strategy prohibits this!",
+                    inject.name
+            ));
+
+        boolean acceptRet = annot.getEntry("acceptOriginalReturn");
+
+        String sig = adaptMethodSignature(source.getMethodTarget(inject), source);
+        final MethodSignature mSig = new MethodSignature(sig);
+
+        final String targetName = source.getMethodTargetName(inject);
+
+        // Collect possible method candidates by name
+        List<MethodNode> candidates = this.target
+                .methods
+                .stream()
+                .filter(it -> it.name.equals(targetName))
+                .collect(Collectors.toList());
+
+        // No candidates match the base criteria
+        if (candidates.isEmpty())
+            throw new MethodNodeResolutionException(String.format(
+                    "Cannot find and target candidates for method %s%s",
+                    inject.name,
+                    inject.desc
+            ));
+
+        // We have a unique candidate
+        if (candidates.size() == 1)
+            return candidates.get(0);
+
+        // If we accept original return value, target with not contain final argument
+        if (acceptRet) {
+            if (!mSig.getRet().equals(mSig.getArg(mSig.getArgCount() - 1)))
+                throw new MethodNodeResolutionException(String.format(
+                        "Return value must match final method argument when accepting return: %s%s",
+                        inject.name,
+                        inject.desc
+                ));
+            sig = mSig.withoutLastArg().toString();
+        }
+
+        final String findSig = sig;
+        candidates = candidates.stream().filter(it -> it.desc.equals(findSig)).collect(Collectors.toList());
+
+        // We have no candidates
+        if (candidates.isEmpty())
+            throw new MethodNodeResolutionException(String.format(
+                    "Cannot find and target candidates for method %s%s",
+                    inject.name,
+                    inject.desc
+            ));
+
+        // If we have a candidate, it will have a specific name and signature
+        // Therefore there cannot be more than one candidate by JVM convention
+        return candidates.get(0);
     }
 
     protected static boolean isStatic(MethodNode node) {
