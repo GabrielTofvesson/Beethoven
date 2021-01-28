@@ -2,7 +2,8 @@
 <project version="4">
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="Beethoven" />
+      <module name="Beethoven"/>
+      <!--  options="- -add-exports java.base/jdk.internal.org.objectweb.asm.tree=ALL-UNNAMED - -add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED"  -->
     </option>
   </component>
 </project>
