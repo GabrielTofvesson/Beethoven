@@ -6,7 +6,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static dev.w1zzrd.asm.InPlaceInjection.*;
 
-@InjectClass(value = MergeTest.class)
+@InjectClass(MergeTest.class)
 public class MergeInject extends MergeTest implements Runnable {
 
     @Inject
