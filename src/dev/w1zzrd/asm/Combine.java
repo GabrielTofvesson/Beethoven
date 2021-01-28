@@ -2,6 +2,7 @@ package dev.w1zzrd.asm;
 
 import dev.w1zzrd.asm.analysis.AsmAnnotation;
 import dev.w1zzrd.asm.exception.MethodNodeResolutionException;
+import dev.w1zzrd.asm.exception.SignatureCheckException;
 import dev.w1zzrd.asm.exception.SignatureInstanceMismatchException;
 import dev.w1zzrd.asm.signature.MethodSignature;
 import dev.w1zzrd.asm.signature.TypeSignature;
@@ -30,7 +31,7 @@ public class Combine {
     }
 
     public void inject(MethodNode node, GraftSource source) {
-        final AsmAnnotation<Inject> annotation = source.getInjectAnnotation(node);
+        final AsmAnnotation<Inject> annotation = source.getMethodInjectAnnotation(node);
 
         final boolean acceptReturn = annotation.getEntry("acceptOriginalReturn");
 
@@ -193,6 +194,50 @@ public class Combine {
         adaptMethod(inject, source);
 
         this.target.methods.add(inject);
+    }
+
+    public void inject(FieldNode field, GraftSource source) {
+        if (field.desc.equals(source.getTypeName()))
+            field.desc = target.name;
+
+        // Remove existing field with same name
+        for (FieldNode node : target.fields)
+            if (node.name.equals(field.name)) {
+                target.fields.remove(node);
+                break;
+            }
+
+        target.fields.add(field);
+    }
+
+    public void setSuperClass(String superDesc) {
+        // Theoretically usable for redefining Object (under a new ClassLoader)
+        if (superDesc == null) {
+            target.superName = null;
+            return;
+        }
+
+        if (new TypeSignature(superDesc).isPrimitive())
+            throw new SignatureCheckException("Superclass cannot be primitive: "+superDesc);
+
+        target.superName = superDesc;
+    }
+
+    public String getSuperclass() {
+        return target.superName;
+    }
+
+    public TypeSignature[] getInterfaces() {
+        return target.interfaces.stream().map(TypeSignature::new).toArray(TypeSignature[]::new);
+    }
+
+    public boolean removeInterface(String interfaceDesc) {
+        return target.interfaces.remove(interfaceDesc);
+    }
+
+    public void addInterface(String interfaceDesc) {
+        if (!target.interfaces.contains(interfaceDesc))
+            target.interfaces.add(interfaceDesc);
     }
 
 

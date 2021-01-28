@@ -102,6 +102,18 @@ public final class AsmAnnotation<A extends Annotation> {
         return hasDefaultEntry(name) || hasExplicitEntry(name);
     }
 
+    public static <T extends Annotation> AsmAnnotation<T> getAnnotation(Class<T> find, Iterable<AnnotationNode> nodes) {
+        if (nodes == null)
+            return null;
+
+        for (AnnotationNode node : nodes) {
+            AsmAnnotation<T> annot = getAnnotation(node);
+            if (annot.getAnnotationType().equals(find))
+                return annot;
+        }
+
+        return null;
+    }
 
     public static <T extends Annotation> AsmAnnotation<T> getAnnotation(AnnotationNode node) {
         Class<T> cls;
@@ -116,6 +128,6 @@ public final class AsmAnnotation<A extends Annotation> {
             for (int i = 0; i < node.values.size(); i += 2)
                 entries.put((String)node.values.get(i), node.values.get(i + 1));
 
-        return new AsmAnnotation<T>(cls, entries);
+        return new AsmAnnotation<>(cls, entries);
     }
 }

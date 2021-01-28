@@ -132,16 +132,24 @@ public final class GraftSource {
         return methodAnnotations
                 .keySet()
                 .stream()
-                .sorted(Comparator.comparingInt(a -> getInjectAnnotation(a).getEntry("priority")))
+                .sorted(Comparator.comparingInt(a -> getMethodInjectAnnotation(a).getEntry("priority")))
                 .collect(Collectors.toList());
     }
 
-    public Set<FieldNode> getInjectFields() {
-        return fieldAnnotations.keySet();
+    public List<FieldNode> getInjectFields() {
+        return fieldAnnotations
+                .keySet()
+                .stream()
+                .sorted(Comparator.comparingInt(a -> getFieldInjectAnnotation(a).getEntry("priority")))
+                .collect(Collectors.toList());
     }
 
-    public AsmAnnotation<Inject> getInjectAnnotation(MethodNode node) {
+    public AsmAnnotation<Inject> getMethodInjectAnnotation(MethodNode node) {
         return getInjectionDirective(methodAnnotations.get(node));
+    }
+
+    public AsmAnnotation<Inject> getFieldInjectAnnotation(FieldNode node) {
+        return getInjectionDirective(fieldAnnotations.get(node));
     }
 
     private static boolean hasNoInjectionDirective(List<AsmAnnotation<?>> annotations) {
