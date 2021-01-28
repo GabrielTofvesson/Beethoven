@@ -21,10 +21,15 @@ methods and fields.
 
 * In-place method prepending
   
-* Automatic injection of INVOKEDYNAMIC lambda targets
+* Automatic injection of [INVOKEDYNAMIC](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.invokedynamic) lambda targets
 
 ### TODO
 
 * Better tests
 
-* Execution path optimization (e.g. remove unnecessary GOTOs)
+* Execution path optimization (e.g. remove unnecessary [GOTO](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.goto)s)
+
+* Implement exceptions
+
+* Implement try-catch
+  * Implement subroutines ([JSR](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.jsr) / [RET](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.ret))
