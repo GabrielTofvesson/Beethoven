@@ -13,16 +13,16 @@ public class MergeInject extends MergeTest implements Runnable {
     public int number;
 
     // Dummy field
-    String s;
+    @Inject
+    private String s;
 
-    /*
+
     @Inject
     MergeInject() {
+        Directives.callSuper();
         s = "Hello";
         number = 10;
     }
-
-     */
 
 
     @Inject(value = BEFORE, target = "stackTest()I")
@@ -33,12 +33,16 @@ public class MergeInject extends MergeTest implements Runnable {
             return 69420;
         }
 
+        this.number = ThreadLocalRandom.current().nextInt();
+
+        System.out.println(number);
+
         Directives.callOriginal();
         return 0;
     }
 
 
-    @Inject(value = AFTER, target = "stackTest()I", acceptOriginalReturn = true)
+    @Inject(value = AFTER, acceptOriginalReturn = true)
     public int stackTest(int arg) {
         Runnable r = () -> {
           System.out.println(arg / 15);
@@ -49,30 +53,13 @@ public class MergeInject extends MergeTest implements Runnable {
     }
 
 
-    @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
+    @Inject(value = AFTER, acceptOriginalReturn = true)
     public String test(String retVal){
 
         System.out.println(retVal + "Cringe");
 
         return "Modified";
     }
-
-    /*
-    @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
-    public String test_inject$1(String retVal) {
-        System.out.println("Another injection: "+retVal);
-        return retVal;
-    }
-     */
-
-
-
-
-
-
-
-
-
 
 
     @Override
@@ -83,6 +70,4 @@ public class MergeInject extends MergeTest implements Runnable {
             System.out.println(test()+'\n');
         }
     }
-
-    public String test1(){ return null; }
 }

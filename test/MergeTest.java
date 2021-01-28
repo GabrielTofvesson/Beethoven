@@ -2,7 +2,7 @@ import dev.w1zzrd.asm.Combine;
 
 public class MergeTest {
 
-    String s;
+    private final String s;
 
 
     public MergeTest(){
