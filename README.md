@@ -18,9 +18,13 @@ methods and fields.
 * In-place method appending
   * Accepting return value as argument
   * Overwriting return value
+
+* In-place method prepending
   
 * Automatic injection of INVOKEDYNAMIC lambda targets
 
 ### TODO
-  
-* In-place method prepending
+
+* Better tests
+
+* Execution path optimization (e.g. remove unnecessary GOTOs)
