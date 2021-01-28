@@ -23,6 +23,8 @@ methods and fields.
   
 * Automatic injection of [INVOKEDYNAMIC](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.invokedynamic) lambda targets
 
+* Method injection priority
+
 ### TODO
 
 * Better tests
@@ -39,8 +41,6 @@ methods and fields.
 * Inject interfaces
 
 * Inject fields
-
-* Method injection priority
 
 ## How do I use this?
 
