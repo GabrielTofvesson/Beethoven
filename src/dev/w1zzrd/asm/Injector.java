@@ -2,10 +2,9 @@ package dev.w1zzrd.asm;
 
 import dev.w1zzrd.asm.analysis.AsmAnnotation;
 import jdk.internal.org.objectweb.asm.Type;
-import jdk.internal.org.objectweb.asm.tree.AnnotationNode;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.FieldNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -17,8 +16,6 @@ import java.util.Objects;
  * Simple class for automatically performing transformations
  */
 public class Injector {
-    private static final String injectAnnotDesc = "L"+InjectClass.class.getName().replace('.', '/')+";";
-
     /**
      * Attempt to inject all valid classes into the given merger from the given loader
      * @param loader Loader to get class resources from
@@ -29,6 +26,20 @@ public class Injector {
         Enumeration<URL> resources = loader.getResources("");
         while (resources.hasMoreElements())
             injectDirectory(new File(resources.nextElement().getPath()), merger);
+    }
+
+    public static void injectAll(Combine merger) throws IOException {
+        injectAll(ClassLoader.getSystemClassLoader(), merger);
+    }
+
+    public static Combine injectAll(ClassLoader loader, String name) throws IOException {
+        Combine combine = new Combine(Loader.getClassNode(name));
+        injectAll(loader, combine);
+        return combine;
+    }
+
+    public static Combine injectAll(String name) throws IOException {
+        return injectAll(ClassLoader.getSystemClassLoader(), name);
     }
 
     // Inject all files in a given directory into the merger
@@ -50,21 +61,33 @@ public class Injector {
         ClassNode cNode;
 
         assert url != null;
-        if(url.getPath().endsWith(".class") && shouldInject(merger, cNode = Loader.getClassNode(url))) {
+
+        AsmAnnotation<InjectClass> annot;
+
+        if(url.getPath().endsWith(".class") &&
+                shouldInject(merger,
+                        (annot = AsmAnnotation.getAnnotation( // Load InjectClass annotation (if it exists)
+                                InjectClass.class,
+                                (cNode = Loader.getClassNode(url)).visibleAnnotations // Load class data
+                        )))) {
             GraftSource source = new GraftSource(cNode);
             for (MethodNode mNode : source.getInjectMethods())
                 merger.inject(mNode, source);
+
+            for (FieldNode fNode : source.getInjectFields())
+                merger.inject(fNode, source);
+
+            if ((Boolean)annot.getEntry("injectInterfaces")) {
+                for (String iface : cNode.interfaces)
+                    merger.addInterface(iface);
+            }
         }
     }
 
-    private static boolean shouldInject(Combine combine, ClassNode node) {
-        for (AnnotationNode annotNode : node.visibleAnnotations)
-            if (annotNode.desc.equals(injectAnnotDesc) &&
-                    ((Type)(AsmAnnotation.getAnnotation(annotNode).getEntry("value")))
-                            .getClassName()
-                            .equals(combine.getTargetName()))
-                return true;
-
-        return false;
+    private static boolean shouldInject(Combine combine, AsmAnnotation<InjectClass> annot) {
+        return annot != null && ((Type) annot
+                .getEntry("value"))
+                .getClassName()
+                .equals(combine.getTargetName());
     }
 }
