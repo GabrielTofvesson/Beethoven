@@ -63,7 +63,7 @@ public final class Foo {
 ```
 
 Say we would like to modify the behaviour of `addMyNumber` to print the value of `addTo` and return the value as defined
-above, except multiplied by two. Under normal conditions where the `Foo` source code could be modified, this might looks
+above, except divided by two. Under normal conditions where the `Foo` source code could be modified, this might looks
 as follows:
 
 ```java
