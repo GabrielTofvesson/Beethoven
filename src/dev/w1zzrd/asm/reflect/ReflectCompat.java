@@ -1,4 +1,4 @@
-package dev.w1zzrd.asm;
+package dev.w1zzrd.asm.reflect;
 
 import dev.w1zzrd.asm.reflect.BruteForceDummy;
 import sun.misc.Unsafe;

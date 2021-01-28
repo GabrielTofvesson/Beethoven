@@ -274,6 +274,10 @@ public class Combine {
         return null;
     }
 
+    public String getTargetName() {
+        return target.name;
+    }
+
     /**
      * Prepares a {@link MethodNode} for grafting on to a given method and into the targeted  {@link ClassNode}
      * @param node Node to adapt
