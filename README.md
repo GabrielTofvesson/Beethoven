@@ -116,7 +116,7 @@ Types follow the JNI type naming standard:
 | Object | L`type`; |
 
 For objects, the type is specified as the full path of the type, where all `.` are replaced with `/`. So, for example,
-a Java string would be written as `Ljava/lang/String;`. Generics are ignored when describing a class type.
+a Java string would be written as `Ljava/lang/String;`. Generics are ignored when describing an objects type.
 
 Finally, this means that, for example, the method
 ```java
