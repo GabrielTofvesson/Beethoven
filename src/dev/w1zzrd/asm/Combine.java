@@ -12,20 +12,14 @@ import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import static jdk.internal.org.objectweb.asm.ClassWriter.COMPUTE_MAXS;
 
 public class Combine {
-    private static final String VAR_NAME_CHARS = "$_qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM";
-    private static final String VAR_NAME_CHARS1 = "$_qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890";
-
     private final ArrayList<DynamicSourceUnit> graftSources = new ArrayList<>();
 
     private final ClassNode target;
@@ -302,18 +296,6 @@ public class Combine {
         node.name = source.getMethodTargetName(node);
     }
 
-    private static LabelNode findOrMakeEndLabel(List<AbstractInsnNode> nodes) {
-        AbstractInsnNode last = nodes.get(nodes.size() - 1);
-
-        if (last instanceof LabelNode)
-            return (LabelNode) last;
-
-        LabelNode label = new LabelNode();
-
-        nodes.add(label);
-        return label;
-    }
-
     protected static LabelNode findOrMakeEndLabel(InsnList nodes) {
         AbstractInsnNode last = nodes.getLast();
 
@@ -412,29 +394,6 @@ public class Combine {
             nodes.insert(current, current = new JumpInsnNode(Opcodes.GOTO, endLabel));
         }
     }
-
-    private static List<AbstractInsnNode> decomposeToList(InsnList insns) {
-        try {
-            // This should save us some overhead
-            Field elementData = ArrayList.class.getDeclaredField("elementData");
-            elementData.setAccessible(true);
-            Field size = ArrayList.class.getDeclaredField("size");
-            size.setAccessible(true);
-
-            // Make arraylist and get array of instructions
-            ArrayList<AbstractInsnNode> decomposed = new ArrayList<>();
-            AbstractInsnNode[] nodes = insns.toArray();
-
-            // Copy instructions to arraylist
-            elementData.set(decomposed, nodes);
-            size.set(decomposed, nodes.length);
-
-            return decomposed;
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new RuntimeException(e); // Probably Java 9+
-        }
-    }
-
 
     private static void adjustArgument(MethodNode node, LocalVariableNode varNode, boolean backward, boolean insert) {
         if (backward) {
@@ -815,15 +774,6 @@ public class Combine {
     @SuppressWarnings("unused") // Used for debugging
     public static java.util.List<? extends AbstractInsnNode> dumpInsns(MethodNode node) {
         return Arrays.asList(node.instructions.toArray());
-    }
-
-    protected static InsnList coalesceInstructions(List<AbstractInsnNode> nodes) {
-        InsnList insns = new InsnList();
-
-        for(AbstractInsnNode node : nodes)
-            insns.add(node);
-
-        return insns;
     }
 
     protected static List<LocalVariableNode> getVarsOver(List<LocalVariableNode> varNodes, int minIndex) {
