@@ -176,3 +176,45 @@ To inject code from multiple tweak classes, simply define more `GraftSource` ins
 
 Currently, Beethoven supports injecting code before and after the original method, as well as overwriting existing
 methods entirely, as well as adding new methods.
+
+In fact, there is a drastically simpler way to inject code into a target. Say we know that the above classes are all
+available to the default ClassLoader's classpath. In this case, we can simply do as follows:
+
+```java
+import dev.w1zzrd.asm.Injector;
+
+public class Run {
+  public static void main(String[] args) {
+      // Locates all necessary tweaks and injects them into Foo
+    Injector.injectAll("Foo").compile();
+
+    // Done! To see that it has worked, we can try running the tweaked method:
+    int result = new Foo(5).addMyNumber(15);  // Prints "5"
+
+    System.out.println(result); // Prints "10"
+  }
+}
+```
+
+The only caveat is that classes injected this way must have an `@InjectClass` annotation declaring the targeted class.
+In our example, this would mean that the `TweakFoo` class would look as follows:
+
+```java
+import dev.w1zzrd.asm.InPlaceInjection;
+import dev.w1zzrd.asm.Inject;
+import dev.w1zzrd.asm.InjectClass;
+
+// This marks the class as targeting Foo
+@InjectClass(Foo.class)
+public class TweakFoo {
+  @Inject(value = InPlaceInjection.AFTER, target = "addMyNumber(I)I", acceptOriginalReturn = true)
+  public int addMyNumber(int addTo, int ret) {
+    System.out.println(addTo);
+    return ret / 2;
+  }
+}
+```
+
+Additionally, method resolution is relatively intelligent, so one can omit the `target` parameter of the `@Inject`
+annotation in cases where the target is unambiguous. As long as the tweak method has the same name as the targeted
+method, the target should never be ambiguous.
