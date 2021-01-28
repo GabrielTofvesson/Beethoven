@@ -128,8 +128,12 @@ public final class GraftSource {
         return fieldAnnotations.get(node);
     }
 
-    public Set<MethodNode> getInjectMethods() {
-        return methodAnnotations.keySet();
+    public List<MethodNode> getInjectMethods() {
+        return methodAnnotations
+                .keySet()
+                .stream()
+                .sorted(Comparator.comparingInt(a -> getInjectAnnotation(a).getEntry("priority")))
+                .collect(Collectors.toList());
     }
 
     public Set<FieldNode> getInjectFields() {

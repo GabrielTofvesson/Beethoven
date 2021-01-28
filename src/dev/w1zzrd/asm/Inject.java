@@ -30,4 +30,6 @@ public @interface Inject {
      * @return True if the injection method should receive the return value
      */
     boolean acceptOriginalReturn() default false;
+
+    int priority() default Integer.MIN_VALUE;
 }
