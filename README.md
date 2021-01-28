@@ -24,6 +24,12 @@ methods and fields.
 * Automatic injection of [INVOKEDYNAMIC](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.invokedynamic) lambda targets
 
 * Method injection priority
+  
+* Inject superclasses
+
+* Inject interfaces
+
+* Inject fields
 
 ### TODO
 
@@ -35,12 +41,6 @@ methods and fields.
 
 * Implement try-catch
   * Implement subroutines ([JSR](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.jsr) / [RET](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.ret))
-  
-* Inject superclasses
-
-* Inject interfaces
-
-* Inject fields
 
 ## How do I use this?
 
