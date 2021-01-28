@@ -1,5 +1,8 @@
+import dev.w1zzrd.asm.Directives;
 import dev.w1zzrd.asm.InjectClass;
 import dev.w1zzrd.asm.Inject;
+
+import java.util.concurrent.ThreadLocalRandom;
 
 import static dev.w1zzrd.asm.InPlaceInjection.*;
 
@@ -22,7 +25,17 @@ public class MergeInject extends MergeTest implements Runnable {
      */
 
 
+    @Inject(value = BEFORE, target = "stackTest()I")
+    public int beforeStackTest() {
+        System.out.println("This is before stack test");
+        if (ThreadLocalRandom.current().nextBoolean()) {
+            System.out.println("Shortcut");
+            return 69420;
+        }
 
+        Directives.callOriginal();
+        return 0;
+    }
 
 
     @Inject(value = AFTER, target = "stackTest()I", acceptOriginalReturn = true)
@@ -39,36 +52,7 @@ public class MergeInject extends MergeTest implements Runnable {
     @Inject(value = AFTER, target = "test()Ljava/lang/String;", acceptOriginalReturn = true)
     public String test(String retVal){
 
-        System.out.println("Got retval: "+retVal);
-
-        if (retVal.endsWith("e!!Test")) {
-            System.out.println("Special case!");
-            return "Not Modified?";
-        }
-
-        retVal = "ASDF";
-
-        System.out.println("Eyyyy");
-
-        String a = "retVal";
-
-        System.out.println(a);
-        a = "Test";
-        System.out.println(a);
-
-        System.out.println(s);
-
-
-
-        if(s.endsWith("e!!")) {
-            System.out.println("Special!");
-            return "ASDF";
-        }
-
-
-
-        System.out.println(s);
-
+        System.out.println(retVal + "Cringe");
 
         return "Modified";
     }
