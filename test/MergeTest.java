@@ -1,4 +1,4 @@
-import dev.w1zzrd.asm.Merger;
+import dev.w1zzrd.asm.Combine;
 
 public class MergeTest {
 
@@ -14,7 +14,7 @@ public class MergeTest {
     }
 
     public String test(){
-        Class<?> c = Merger.class;
+        Class<?> c = Combine.class;
         Runnable r = () -> {
             System.out.println("Sick");
             System.out.println(c.getName());
