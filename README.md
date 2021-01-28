@@ -113,18 +113,29 @@ Types follow the JNI type naming standard:
 | Long | J |
 | Float | F |
 | Double | D |
-| Object | L`type`; |
+| Object | L`path`; |
+| Array | [`Type` |
 
 For objects, the type is specified as the full path of the type, where all `.` are replaced with `/`. So, for example,
 a Java string would be written as `Ljava/lang/String;`. Generics are ignored when describing an objects type.
 
+Array types are defined as a `[` followed by any JNI type (including another array type). Nested arrays are written as
+consecutive `[`. For example, a three-dimensional `Throwable` array (`Throwable[][][]`) would be written as
+`[[[Ljava/lang/Throwable;`.
+
 Finally, this means that, for example, the method
 ```java
-public Class<?> getClass(String name, int index, float crashProbability) {
+public Class<?> getClass(
+        String name,
+        int index,
+        float crashProbability,
+        double[] numbers,
+        String[][] crashMap
+        ) {
     // ...
 }
 ```
-would have the `target` value `getClass(Ljava/lang/String;IF)Ljava/lang/Class;`
+would have the `target` value `getClass(Ljava/lang/String;IF[D[[Ljava/lang/String;)Ljava/lang/Class;`
 
 ### Targeting classes
 
