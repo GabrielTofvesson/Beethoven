@@ -217,4 +217,34 @@ public class TweakFoo {
 
 Additionally, method resolution is relatively intelligent, so one can omit the `target` parameter of the `@Inject`
 annotation in cases where the target is unambiguous. As long as the tweak method has the same name as the targeted
-method, the target should never be ambiguous.
+method, the target should never be ambiguous. In fact, the resolution is intelligent enough that if the method signature
+is unambiguous for the targeted method name in the targeted class, the `acceptOriginalReturn` value can even be omitted.
+This means that a minimal example implementation of the `TweakFoo` class could look as follows:
+
+```java
+import dev.w1zzrd.asm.InPlaceInjection;
+import dev.w1zzrd.asm.Inject;
+import dev.w1zzrd.asm.InjectClass;
+
+import static dev.w1zzrd.asm.InPlaceInjection.AFTER;
+
+@InjectClass(Foo.class)
+public class TweakFoo {
+  @Inject(AFTER)
+  public int addMyNumber(int addTo, int ret) {
+    System.out.println(addTo);
+    return ret / 2;
+  }
+}
+```
+
+### Priority
+
+In the case where multiple injections are to be made into one method (e.g. `BEFORE` and `AFTER`), it may be useful to
+have a clear order in which the injections should occur. As such, the `priority` value of an `@Inject` annotation can be
+passed to specify which value to inject first. Methods with a lower priority value will be injected earlier than ones
+with higher values. By default, methods have a priority of hex 0x7FFFFFFF (maximum int value). Methods with the same
+target and same priority have no guarantees on injection order. I.e. if two methods annotated with `@Inject` target the
+same method and declare the same priority, there are no guarantees on which one will be injected first. Thus, if a
+method is targeted for injection by multiple tweak methods, it is highly recommended that an explicit priority be
+declared for at least all except one tweak method.
