@@ -31,5 +31,5 @@ public @interface Inject {
      */
     boolean acceptOriginalReturn() default false;
 
-    int priority() default Integer.MIN_VALUE;
+    int priority() default Integer.MAX_VALUE;
 }
