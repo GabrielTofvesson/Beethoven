@@ -57,8 +57,12 @@ public final class GraftSource {
     public String getMethodTarget(MethodNode node) {
         if (methodAnnotations.containsKey(node)) {
             String target = getInjectionDirective(methodAnnotations.get(node)).getEntry("target");
-            if (target != null && target.length() != 0)
-                return target;
+            if (target != null && target.length() != 0) {
+                if (target.indexOf('(') != -1)
+                    return target;
+                else
+                    return target + node.desc;
+            }
         }
 
         return node.name + node.desc;

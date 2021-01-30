@@ -25,7 +25,7 @@ public class MergeInject extends MergeTest implements Runnable {
     }
 
 
-    @Inject(value = BEFORE, target = "stackTest()I")
+    @Inject(value = BEFORE, target = "stackTest")
     public int beforeStackTest() {
         System.out.println("This is before stack test");
         if (ThreadLocalRandom.current().nextBoolean()) {
@@ -42,7 +42,7 @@ public class MergeInject extends MergeTest implements Runnable {
     }
 
 
-    @Inject(value = AFTER, acceptOriginalReturn = true)
+    @Inject(AFTER)
     public int stackTest(int arg) {
         Runnable r = () -> {
           System.out.println(arg / 15);
@@ -53,7 +53,7 @@ public class MergeInject extends MergeTest implements Runnable {
     }
 
 
-    @Inject(value = AFTER, acceptOriginalReturn = true)
+    @Inject(AFTER)
     public String test(String retVal){
 
         System.out.println(retVal + "Cringe");

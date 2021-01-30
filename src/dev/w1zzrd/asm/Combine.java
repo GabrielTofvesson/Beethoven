@@ -33,8 +33,6 @@ public class Combine {
     public void inject(MethodNode node, GraftSource source) {
         final AsmAnnotation<Inject> annotation = source.getMethodInjectAnnotation(node);
 
-        final boolean acceptReturn = annotation.getEntry("acceptOriginalReturn");
-
         switch ((InPlaceInjection)annotation.getEnumEntry("value")) {
             case INSERT: // Explicitly insert a *new* method
                 insert(node, source);
@@ -51,7 +49,7 @@ public class Combine {
                 finishGrafting(node, source);
                 break;
             case AFTER: // Inject a method's instructions after the original instructions in a given method
-                append(node, source, acceptReturn);
+                append(node, source);
                 break;
             case BEFORE: // Inject a method's instructions before the original instructions in a given method
                 prepend(node, source);
@@ -65,22 +63,22 @@ public class Combine {
      * return value from the original node as the "argument" to the grafted node.
      * @param extension Node to extend method with
      * @param source The {@link GraftSource} from which the method node will be adapted
-     * @param acceptReturn Whether or not the grafted method should "receive" the original method's return value as an "argument"
      */
-    public void append(MethodNode extension, GraftSource source, boolean acceptReturn) {
+    public void append(MethodNode extension, GraftSource source) {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = resolveMethod(extension, source, true);
+        final MethodResolution resolution = resolveMethod(extension, source, true);
+        boolean acceptReturn = resolution.acceptReturn;
         adaptMethod(extension, source);
 
         // Get the method signatures so we know what we're working with local-variable-wise ;)
-        final MethodSignature msig = new MethodSignature(target.desc);
+        final MethodSignature msig = new MethodSignature(resolution.node.desc);
         final MethodSignature xsig = new MethodSignature(extension.desc);
 
         // Get total argument count, including implicit "this" argument
         final int graftArgCount = xsig.getArgCount() + (isStatic(extension) ? 0 : 1);
-        final int targetArgCount = msig.getArgCount() + (isStatic(target) ? 0 : 1);
+        final int targetArgCount = msig.getArgCount() + (isStatic(resolution.node) ? 0 : 1);
 
         // If graft method cares about the return value of the original method, i.e. accepts it as an extra "argument"
         if (acceptReturn && !msig.getRet().isVoidType()) {
@@ -92,49 +90,49 @@ public class Combine {
                     .get();
 
             // Inject return variable
-            adjustArgument(target, retVar, true, true);
+            adjustArgument(resolution.node, retVar, true, true);
 
             // Handle retvar specially
             extension.localVariables.remove(retVar);
 
             // Make space in the original frames for the return var
             // This isn't an optimal solution, but it works for now
-            adjustFramesForRetVar(target.instructions, targetArgCount);
+            adjustFramesForRetVar(resolution.node.instructions, targetArgCount);
 
             // Replace return instructions with GOTOs to the last instruction in the list
             // Return values are stored in retVar
-            storeAndGotoFromReturn(target, target.instructions, retVar.index, xsig);
+            storeAndGotoFromReturn(resolution.node, resolution.node.instructions, retVar.index, xsig);
         } else {
             // If we don't care about the return value from the original, we can replace returns with pops
-            popAndGotoFromReturn(target, target.instructions, xsig);
+            popAndGotoFromReturn(resolution.node, resolution.node.instructions, xsig);
         }
 
         List<LocalVariableNode> extVars = getVarsOver(extension.localVariables, xsig.getArgCount());
 
         // Add extension vars to target
-        target.localVariables.addAll(extVars);
+        resolution.node.localVariables.addAll(extVars);
 
         // Add extension instructions to instruction list
-        target.instructions.add(extension.instructions);
+        resolution.node.instructions.add(extension.instructions);
 
         // Make sure we extend the scope of the original method arguments
         for (int i = 0; i < targetArgCount; ++i)
-            adjustArgument(target, getVarAt(target.localVariables, i), false, false);
+            adjustArgument(resolution.node, getVarAt(resolution.node.localVariables, i), false, false);
 
         // Recompute maximum variable count
-        target.maxLocals = Math.max(
+        resolution.node.maxLocals = Math.max(
                 Math.max(
                         targetArgCount + 1,
                         graftArgCount + 1
                 ),
-                target.localVariables
+                resolution.node.localVariables
                         .stream()
                         .map(it -> it.index)
                         .max(Comparator.comparingInt(a -> a)).orElse(0) + 1
         );
 
         // Recompute maximum stack size
-        target.maxStack = Math.max(target.maxStack, extension.maxStack);
+        resolution.node.maxStack = Math.max(resolution.node.maxStack, extension.maxStack);
 
         finishGrafting(extension, source);
     }
@@ -143,7 +141,7 @@ public class Combine {
         if (initiateGrafting(extension, source))
             return;
 
-        final MethodNode target = resolveMethod(extension, source, false);
+        final MethodNode target = resolveMethod(extension, source, false).node;
         adaptMethod(extension, source);
 
         MethodSignature sig = new MethodSignature(extension.desc);
@@ -314,6 +312,10 @@ public class Combine {
 
     public String getTargetName() {
         return target.name;
+    }
+
+    public ClassNode getClassNode() {
+        return target;
     }
 
     /**
@@ -846,7 +848,7 @@ public class Combine {
         return null; // Nothing was found
     }
 
-    protected MethodNode resolveMethod(MethodNode inject, GraftSource source, boolean allowAcceptRet) {
+    protected MethodResolution resolveMethod(MethodNode inject, GraftSource source, boolean allowAcceptRet) {
         AsmAnnotation<Inject> annot = AsmAnnotation.getAnnotation(Inject.class, inject.visibleAnnotations);
         if (!allowAcceptRet && (Boolean)annot.getEntry("acceptOriginalReturn"))
             throw new MethodNodeResolutionException(String.format(
@@ -876,10 +878,6 @@ public class Combine {
                     inject.desc
             ));
 
-        // We have a unique candidate
-        if (candidates.size() == 1)
-            return candidates.get(0);
-
         // If we accept original return value, target with not contain final argument
         if (acceptRet) {
             if (!mSig.getRet().equals(mSig.getArg(mSig.getArgCount() - 1)))
@@ -892,19 +890,36 @@ public class Combine {
         }
 
         final String findSig = sig;
+        final List<MethodNode> cand = candidates;
         candidates = candidates.stream().filter(it -> it.desc.equals(findSig)).collect(Collectors.toList());
 
         // We have no candidates
-        if (candidates.isEmpty())
+        if (candidates.isEmpty()) {
+            // If no candidates were found for the explicitly declared signature,
+            // check if accepting original return value was implied
+            if (!acceptRet &&
+                    allowAcceptRet &&
+                    mSig.getArgCount() > 0 &&
+                    mSig.getRet().equals(mSig.getArg(mSig.getArgCount() - 1))) {
+                // Search for method without the implied return value argument
+                final String fSig = mSig.withoutLastArg().toString();
+                candidates = cand.stream().filter(it -> it.desc.equals(fSig)).collect(Collectors.toList());
+
+                // Do we have a match?
+                if (candidates.size() == 1)
+                    return new MethodResolution(candidates.get(0), true);
+            }
+
             throw new MethodNodeResolutionException(String.format(
                     "Cannot find and target candidates for method %s%s",
                     inject.name,
                     inject.desc
             ));
+        }
 
         // If we have a candidate, it will have a specific name and signature
         // Therefore there cannot be more than one candidate by JVM convention
-        return candidates.get(0);
+        return new MethodResolution(candidates.get(0), acceptRet && allowAcceptRet);
     }
 
     protected static boolean isStatic(MethodNode node) {
@@ -935,6 +950,16 @@ public class Combine {
         @Override
         public int hashCode() {
             return Objects.hash(source, node);
+        }
+    }
+
+    private static class MethodResolution {
+        public final MethodNode node;
+        public final boolean acceptReturn;
+
+        public MethodResolution(MethodNode node, boolean acceptReturn) {
+            this.node = node;
+            this.acceptReturn = acceptReturn;
         }
     }
 }
