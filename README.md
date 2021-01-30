@@ -90,6 +90,10 @@ public class TweakFoo {
 }
 ```
 
+If this looks a bit confusing: don't worry, [it gets simpler](#a-simple-example) after we remove all the things that can
+be inferred automatically by the library. We start with a more complicated example to show explicitly what's happening
+under the hood in case it's needed in more complex use-cases.
+
 We specify using the `@Inject` annotation that we would like to inject the annotated method into the targeted class (
 we'll get to how we target a class in a sec), that we would like to append the code `AFTER` the existing code, that we
 are targeting a method named `addMyNumber` which accepts an int (specified by `(I)`) and returns an int (specified by
@@ -143,12 +147,11 @@ To target a class, simply create an instance of the `dev.w1zzrd.asm.Combine` cla
 annotated MethodNodes. For example, using the example code described earlier, we could do as follows:
 
 ```java
-import dev.w1zzrd.asm.Combine;
-import dev.w1zzrd.asm.GraftSource;
-import dev.w1zzrd.asm.Loader;
+import dev.w1zzrd.asm.*;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
 
 public class Run {
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     // This is the class we would like to inject code into
     Combine target = new Combine(Loader.getClassNode("Foo"));
 
@@ -184,7 +187,7 @@ available to the default ClassLoader's classpath. In this case, we can simply do
 import dev.w1zzrd.asm.Injector;
 
 public class Run {
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
       // Locates all necessary tweaks and injects them into Foo
     Injector.injectAll("Foo").compile();
 
@@ -200,9 +203,7 @@ The only caveat is that classes injected this way must have an `@InjectClass` an
 In our example, this would mean that the `TweakFoo` class would look as follows:
 
 ```java
-import dev.w1zzrd.asm.InPlaceInjection;
-import dev.w1zzrd.asm.Inject;
-import dev.w1zzrd.asm.InjectClass;
+import dev.w1zzrd.asm.*;
 
 // This marks the class as targeting Foo
 @InjectClass(Foo.class)
@@ -221,11 +222,9 @@ method, the target should never be ambiguous. In fact, the resolution is intelli
 is unambiguous for the targeted method name in the targeted class, the `acceptOriginalReturn` value can even be omitted.
 This means that a minimal example implementation of the `TweakFoo` class could look as follows:
 
+#### A simple example:
 ```java
-import dev.w1zzrd.asm.InPlaceInjection;
-import dev.w1zzrd.asm.Inject;
-import dev.w1zzrd.asm.InjectClass;
-
+import dev.w1zzrd.asm.*;
 import static dev.w1zzrd.asm.InPlaceInjection.AFTER;
 
 @InjectClass(Foo.class)
