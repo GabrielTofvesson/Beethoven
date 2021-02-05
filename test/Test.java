@@ -7,6 +7,8 @@ import java.io.IOException;
 
 public class Test {
     public static void main(String... args) throws IOException {
+        ClassLoader.getSystemClassLoader().setDefaultAssertionStatus(false);
+
         // Load target class, inject all annotated classes and load compiled bytecode into JVM
         dumpFile(Injector.injectAll("MergeTest"), "MergeTest").compile();
 

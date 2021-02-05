@@ -22,6 +22,8 @@ public class MergeInject extends MergeTest implements Runnable {
         Directives.callSuper();
         s = "Hello";
         number = 10;
+
+        assert false : "Test";
     }
 
 
