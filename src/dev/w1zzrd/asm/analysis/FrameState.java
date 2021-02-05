@@ -7,9 +7,6 @@ import jdk.internal.org.objectweb.asm.Label;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.*;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -192,7 +189,7 @@ public class FrameState {
      * @param node {@link LabelNode} to find jumps referencing
      * @return A jump instruction node earlier in the instruction list or null if none could be found
      */
-    private static @Nullable JumpInsnNode findEarliestJump(LabelNode node) {
+    private static JumpInsnNode findEarliestJump(LabelNode node) {
         JumpInsnNode jump = null;
 
         // Traverse backward until we hit the beginning of the list
@@ -643,7 +640,7 @@ public class FrameState {
     private static List<String> getOpsByComplexity(
             boolean complexPush,
             boolean complexPop,
-            @Nullable Predicate<Integer> insnP
+            Predicate<Integer> insnP
     ) {
         ArrayList<Integer> opcodes = new ArrayList<>();
 
@@ -687,9 +684,9 @@ public class FrameState {
      * @return Negative values for instructions previous to the current instruction, positive values for instructions
      * after the current instruction. Null if instruction could not be found
      */
-    private static @Nullable Integer relativeIndexOf(
-            @NotNull AbstractInsnNode current,
-            @NotNull AbstractInsnNode find
+    private static Integer relativeIndexOf(
+            AbstractInsnNode current,
+            AbstractInsnNode find
     ) {
         // Check backward
         int idx = 0;

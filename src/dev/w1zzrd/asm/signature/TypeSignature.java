@@ -2,8 +2,6 @@ package dev.w1zzrd.asm.signature;
 
 import dev.w1zzrd.asm.exception.SignatureInstanceMismatchException;
 import dev.w1zzrd.asm.exception.TypeSignatureParseException;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -86,7 +84,7 @@ public class TypeSignature {
      * @param primitive Primitive type internal name (V, J or D for Top types)
      * @param isTop Whether or not this is a Top type (only valid for 64-bit types J and D or as delimiter type V)
      */
-    public TypeSignature(@Nullable Character primitive, boolean isTop) {
+    public TypeSignature(Character primitive, boolean isTop) {
         if (primitive != null) {
             switch (Character.toUpperCase(primitive)) {
                 case 'J':

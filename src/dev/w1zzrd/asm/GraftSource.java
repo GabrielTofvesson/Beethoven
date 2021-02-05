@@ -6,8 +6,6 @@ import jdk.internal.org.objectweb.asm.tree.AnnotationNode;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
 import jdk.internal.org.objectweb.asm.tree.FieldNode;
 import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -91,7 +89,7 @@ public final class GraftSource {
         return getInjectedMethod(name, desc) != null;
     }
 
-    public @Nullable MethodNode getInjectedMethod(String name, String desc) {
+    public MethodNode getInjectedMethod(String name, String desc) {
         return methodAnnotations
                 .entrySet()
                 .stream()

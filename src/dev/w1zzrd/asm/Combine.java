@@ -11,8 +11,6 @@ import jdk.internal.org.objectweb.asm.Handle;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.org.objectweb.asm.tree.*;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -134,6 +132,10 @@ public class Combine {
         // Recompute maximum stack size
         resolution.node.maxStack = Math.max(resolution.node.maxStack, extension.maxStack);
 
+        // Merge try-catch blocks
+        resolution.node.tryCatchBlocks.addAll(extension.tryCatchBlocks);
+        // Exception list not merged to maintain original signature
+
         finishGrafting(extension, source);
     }
 
@@ -154,6 +156,9 @@ public class Combine {
         // Extend argument scope to cover prepended code
         for (int i = 0; i < sig.getArgCount(); ++i)
             adjustArgument(target, getVarAt(target.localVariables, i), true, false);
+
+        target.tryCatchBlocks.addAll(extension.tryCatchBlocks);
+        // Exception list not merged to maintain original signature
 
         finishGrafting(extension, source);
     }
@@ -750,7 +755,7 @@ public class Combine {
      * @return The located method node
      * @throws MethodNodeResolutionException If no method node matching the given description could be found
      */
-    protected final @NotNull MethodNode checkMethodExists(String name, MethodSignature descriptor) {
+    protected final MethodNode checkMethodExists(String name, MethodSignature descriptor) {
         final MethodNode target = findMethodNode(name, descriptor);
 
         if (target == null)
@@ -768,7 +773,7 @@ public class Combine {
      * @param desc Descriptor of the method node to find
      * @return A matching {@link MethodNode} if one exists, else null
      */
-    protected @Nullable MethodNode findMethodNode(String name, MethodSignature desc) {
+    protected MethodNode findMethodNode(String name, MethodSignature desc) {
         return target.methods
                 .stream()
                 .filter(it -> it.name.equals(name) && new MethodSignature(it.desc).equals(desc))
@@ -838,7 +843,7 @@ public class Combine {
     }
 
 
-    protected static @Nullable LabelNode findLabelBeforeReturn(AbstractInsnNode start, INodeTraversal traverse) {
+    protected static LabelNode findLabelBeforeReturn(AbstractInsnNode start, INodeTraversal traverse) {
         for (AbstractInsnNode cur = start; cur != null; cur = traverse.traverse(cur))
             if (cur instanceof LabelNode) // Traversal hit label
                 return (LabelNode) cur;
