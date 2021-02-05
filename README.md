@@ -31,16 +31,20 @@ methods and fields.
 
 * Inject fields
 
+* Handle exceptions
+
+* Inject try-catch
+
 ### TODO
 
 * Better tests
 
 * Execution path optimization (e.g. remove unnecessary [GOTO](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.goto)s)
+  
+* ~~Implement subroutines ([JSR](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.jsr) / [RET](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.ret))~~
 
-* Implement exceptions
-
-* Implement try-catch
-  * Implement subroutines ([JSR](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.jsr) / [RET](https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.ret))
+*Note: Subroutines are prohibited as of class file version 51, so unless this project sees much use with projects targeting Java
+version 1.6 or lower on very specific compilers, this implementation can be set aside until everything else is polished.*
 
 ## How do I use this?
 
