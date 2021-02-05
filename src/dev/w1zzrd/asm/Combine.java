@@ -379,8 +379,13 @@ public class Combine {
     }
 
     private void storeAndGotoFromReturn(MethodNode source, InsnList nodes, int storeIndex, MethodSignature sig) {
+        // The last (injected) GOTO can always be removed
+        AbstractInsnNode lastGoto = null;
+        int jumpCount = 0;
+
         // If we already have a final frame, there's no need to add one
-        LabelNode endLabel = hasEndJumpFrame(nodes) ? findOrMakeEndLabel(nodes) : makeEndJumpFrame(nodes, sig, source);
+        boolean hadEJF = hasEndJumpFrame(nodes);
+        LabelNode endLabel = hadEJF ? findOrMakeEndLabel(nodes) : makeEndJumpFrame(nodes, sig, source);
 
         INSTRUCTION_LOOP:
         for (AbstractInsnNode current = nodes.getFirst(); current != null; current = current.getNext()) {
@@ -406,19 +411,33 @@ public class Combine {
                     break;
 
                 case Opcodes.RETURN:
-                    nodes.set(current, current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+                    nodes.set(current, lastGoto = current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+                    ++jumpCount;
                     // Fallthrough
 
                 default:
                     continue INSTRUCTION_LOOP;
             }
-            nodes.insert(current, current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+            nodes.insert(current, lastGoto = current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+            ++jumpCount;
+        }
+
+        if (lastGoto != null) {
+            nodes.remove(lastGoto);
+
+            // The final jump frame and label can be removed
+            if (jumpCount == 1 && !hadEJF)
+                nodes.remove(endLabel.getNext());
         }
     }
 
     private void popAndGotoFromReturn(MethodNode source, InsnList nodes, MethodSignature sig) {
+        AbstractInsnNode lastGoto = null;
+        int jumpCount = 0;
+
         // If we already have a final frame, there's no need to add one
-        LabelNode endLabel = hasEndJumpFrame(nodes) ? findOrMakeEndLabel(nodes) : makeEndJumpFrame(nodes, sig, source);
+        boolean hadEJF = hasEndJumpFrame(nodes);
+        LabelNode endLabel = hadEJF ? findOrMakeEndLabel(nodes) : makeEndJumpFrame(nodes, sig, source);
 
         INSTRUCTION_LOOP:
         for (AbstractInsnNode current = nodes.getFirst(); current != null; current = current.getNext()) {
@@ -435,14 +454,25 @@ public class Combine {
                     break;
 
                 case Opcodes.RETURN:
-                    nodes.set(current, current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+                    nodes.set(current, lastGoto = current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+                    ++jumpCount;
                     // Fallthrough
 
                 default:
                     continue INSTRUCTION_LOOP;
             }
 
-            nodes.insert(current, current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+            nodes.insert(current, lastGoto = current = new JumpInsnNode(Opcodes.GOTO, endLabel));
+            ++jumpCount;
+        }
+
+
+        if (lastGoto != null) {
+            nodes.remove(lastGoto);
+
+            // The final jump frame and label can be removed
+            if (jumpCount == 1 && !hadEJF)
+                nodes.remove(endLabel.getNext());
         }
     }
 
