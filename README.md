@@ -35,6 +35,12 @@ methods and fields.
 
 * Inject try-catch-finally
 
+* Inject assertions
+
+*A caveat regarding assert-statements: the compiler synthesizes a static final field named `$assertionsDisabled`, so if a target
+class declares a static field with this name and does not declare any assertions in its code, loading of the field may already
+be done in static initialization or field declaration, preventing assertions from functioning as intended for injected code.*
+
 ### TODO
 
 * Better tests

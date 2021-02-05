@@ -1,6 +1,5 @@
 package dev.w1zzrd.asm;
 
-import com.sun.org.apache.bcel.internal.generic.GotoInstruction;
 import dev.w1zzrd.asm.analysis.AsmAnnotation;
 import dev.w1zzrd.asm.exception.MethodNodeResolutionException;
 import dev.w1zzrd.asm.exception.SignatureCheckException;
