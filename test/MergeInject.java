@@ -45,8 +45,8 @@ public class MergeInject extends MergeTest implements Runnable {
     @Inject(AFTER)
     public int stackTest(int arg) {
         Runnable r = () -> {
-          System.out.println(arg / 15);
-          System.out.println("Heyo");
+            System.out.println(arg / 15);
+            System.out.println("Heyo");
         };
         r.run();
         return 69;
@@ -54,9 +54,19 @@ public class MergeInject extends MergeTest implements Runnable {
 
 
     @Inject(AFTER)
-    public String test(String retVal){
+    public String test(String retVal) throws Exception {
 
         System.out.println(retVal + "Cringe");
+
+        try {
+            if (ThreadLocalRandom.current().nextBoolean())
+                throw new Exception("Hello from exception");
+        }catch (Exception e) {
+            System.out.println("Hello from catch");
+            e.printStackTrace();
+        } finally {
+            System.out.println("Hello from finally");
+        }
 
         return "Modified";
     }

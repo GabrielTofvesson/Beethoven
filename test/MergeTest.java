@@ -14,7 +14,7 @@ public class MergeTest {
     }
 
     public String test(){
-        Class<?> c = Combine.class;
+        final Class<?> c = Combine.class;
         Runnable r = () -> {
             System.out.println("Sick");
             System.out.println(c.getName());
