@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 import java.util.Objects;
 
@@ -25,7 +27,10 @@ public class Injector {
     public static void injectAll(ClassLoader loader, Combine merger) throws IOException {
         Enumeration<URL> resources = loader.getResources("");
         while (resources.hasMoreElements())
-            injectDirectory(new File(resources.nextElement().getPath()), merger);
+            injectDirectory(new File(URLDecoder.decode(
+                    resources.nextElement().getFile(),
+                    StandardCharsets.UTF_8.name())
+            ), merger);
     }
 
     public static void injectAll(Combine merger) throws IOException {
